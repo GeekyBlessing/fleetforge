@@ -158,6 +158,52 @@ type WorkerRow struct {
 	DrainRequested      bool
 }
 
+// CountByStatus backs internal/metrics's worker-count gauge (Day 6) --
+// one GROUP BY rather than 6 separate List(status=X) calls.
+func (s *WorkerStore) CountByStatus(ctx context.Context) (map[string]int32, error) {
+	rows, err := s.pool.Query(ctx, `SELECT status, COUNT(*) FROM workers GROUP BY status`)
+	if err != nil {
+		return nil, fmt.Errorf("count workers by status: %w", err)
+	}
+	defer rows.Close()
+
+	out := make(map[string]int32)
+	for rows.Next() {
+		var status string
+		var count int32
+		if err := rows.Scan(&status, &count); err != nil {
+			return nil, fmt.Errorf("scan worker-count-by-status row: %w", err)
+		}
+		out[status] = count
+	}
+	return out, rows.Err()
+}
+
+// PickDrainCandidate implements the "never touch BUSY workers" rule from
+// docs/09-design-rationale.md 9.2 point 3: the autoscaler's scale-down path
+// only ever selects a fully-idle worker (READY, available_capacity ==
+// capacity_slots -- not just READY with SOME spare capacity, since a
+// worker mid-way through other work under a higher capacity_slots value
+// shouldn't be drained either) that isn't already draining. Returns "" (not
+// an error) if nothing qualifies right now -- scale-down simply does
+// nothing that tick rather than force a pick.
+func (s *WorkerStore) PickDrainCandidate(ctx context.Context) (string, error) {
+	var id string
+	err := s.pool.QueryRow(ctx, `
+		SELECT id FROM workers
+		WHERE status = 'READY' AND available_capacity = capacity_slots AND drain_requested = false
+		ORDER BY registered_at ASC
+		LIMIT 1
+	`).Scan(&id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", nil
+		}
+		return "", fmt.Errorf("pick drain candidate: %w", err)
+	}
+	return id, nil
+}
+
 // List returns workers matching an optional status filter, most-recently
 // registered first, capped at limit. Cursor-based pagination (per
 // docs/02-openapi.yaml) is a real gap here -- Day 1 ships offset-free "first

@@ -144,6 +144,30 @@ func (s *JobStore) Get(ctx context.Context, jobID string) (Job, error) {
 	return j, nil
 }
 
+// CountQueuedByPriority backs internal/metrics's queue-depth gauge (Day 6)
+// -- a single GROUP BY rather than 10 separate List(status=QUEUED,
+// priority=N) calls, since this runs on every Collector tick.
+func (s *JobStore) CountQueuedByPriority(ctx context.Context) (map[int16]int32, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT priority, COUNT(*) FROM jobs WHERE status = 'QUEUED' GROUP BY priority
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("count queued jobs by priority: %w", err)
+	}
+	defer rows.Close()
+
+	out := make(map[int16]int32)
+	for rows.Next() {
+		var priority int16
+		var count int32
+		if err := rows.Scan(&priority, &count); err != nil {
+			return nil, fmt.Errorf("scan queued-by-priority row: %w", err)
+		}
+		out[priority] = count
+	}
+	return out, rows.Err()
+}
+
 type ListJobsFilter struct {
 	Status     string
 	Repository string

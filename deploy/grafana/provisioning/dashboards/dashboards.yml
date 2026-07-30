@@ -1,0 +1,14 @@
+# Tells Grafana to load every dashboard JSON file dropped into
+# /var/lib/grafana/dashboards (mounted from ./grafana/dashboards) on
+# startup, rather than requiring a manual import.
+apiVersion: 1
+
+providers:
+  - name: FleetForge
+    orgId: 1
+    folder: ""
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards

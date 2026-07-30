@@ -9,6 +9,7 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
 
+	"github.com/launchverse/fleetforge/internal/metrics"
 	"github.com/launchverse/fleetforge/internal/store/postgres"
 	ffredis "github.com/launchverse/fleetforge/internal/store/redis"
 )
@@ -217,6 +218,7 @@ func (l *Loop) processMessage(ctx context.Context, streamKey string, msg goredis
 		l.log.Warn().Err(err).Str("worker_id", chosen.ID).Msg("failed to update redis cache after assignment")
 	}
 
+	metrics.JobsAssignedTotal.Inc()
 	l.log.Info().Str("job_id", jobID).Str("worker_id", chosen.ID).Msg("assigned job to worker")
 	l.ack(ctx, streamKey, msg.ID)
 }

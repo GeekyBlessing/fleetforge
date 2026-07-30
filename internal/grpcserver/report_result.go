@@ -7,6 +7,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/launchverse/fleetforge/internal/metrics"
 	ffredis "github.com/launchverse/fleetforge/internal/store/redis"
 	fleetforgev1 "github.com/launchverse/fleetforge/proto/fleetforge/v1"
 )
@@ -98,6 +99,17 @@ func (s *Server) ReportJobResult(
 				s.log.Warn().Err(err).Str("worker_id", *job.WorkerID).Msg("failed to update redis cache after freeing worker")
 			}
 		}
+	}
+
+	metrics.JobsCompletedTotal.WithLabelValues(finalStatus).Inc()
+	// Duration is only meaningful for a job's FINAL terminal transition --
+	// a RETRYING job isn't done yet (it's going to run again), so recording
+	// "duration" here would conflate one attempt's runtime with the job's
+	// eventual total lifetime. job.StartedAt is nil if the job somehow never
+	// reached RUNNING (shouldn't happen given the guards above, but a nil
+	// check costs nothing).
+	if finalStatus != "RETRYING" && job.StartedAt != nil {
+		metrics.JobDurationSeconds.Observe(time.Since(*job.StartedAt).Seconds())
 	}
 
 	s.log.Info().

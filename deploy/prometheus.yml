@@ -1,0 +1,13 @@
+# Day 6 scrape config. The scheduler runs on the HOST during local dev
+# (`go run ./cmd/scheduler`, not inside this compose file -- see
+# docs/07-repository-structure.md's note that a Dockerfile.scheduler is a
+# later, deployment-time concern, not needed to develop against), so
+# Prometheus (which DOES run in a container here) reaches it via Docker
+# Desktop's host.docker.internal DNS name, not a compose service name.
+global:
+  scrape_interval: 10s
+
+scrape_configs:
+  - job_name: "fleetforge-scheduler"
+    static_configs:
+      - targets: ["host.docker.internal:8080"]

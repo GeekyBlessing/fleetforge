@@ -15,12 +15,14 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
 
 	"github.com/launchverse/fleetforge/internal/api"
 	"github.com/launchverse/fleetforge/internal/config"
 	"github.com/launchverse/fleetforge/internal/grpcserver"
+	"github.com/launchverse/fleetforge/internal/metrics"
 	"github.com/launchverse/fleetforge/internal/scheduler"
 	"github.com/launchverse/fleetforge/internal/store/postgres"
 	ffredis "github.com/launchverse/fleetforge/internal/store/redis"
@@ -88,6 +90,25 @@ func main() {
 	// leader-gated, same reasoning as the reaper above.
 	retryPoller := scheduler.NewRetryPoller(jobStore, jobQueue, log, 2*time.Second)
 	go retryPoller.Run(ctx, leaderElector.IsLeader)
+
+	// --- Metrics (Day 6) ---
+	// Registered once, here, against the DEFAULT registry -- promhttp.Handler()
+	// in internal/api/router.go reads from that same default registry/gatherer,
+	// so no Registry object needs to be threaded through main() and the router.
+	metrics.MustRegister(prometheus.DefaultRegisterer)
+	metricsCollector := metrics.NewCollector(jobStore, workerStore, log, 10*time.Second)
+	go metricsCollector.Run(ctx)
+
+	// --- Autoscaler (Day 6, docs/09-design-rationale.md 9.2) -- leader-gated ---
+	autoscaler := scheduler.NewAutoscaler(
+		workerStore,
+		jobStore,
+		workerCache,
+		log,
+		scheduler.DefaultAutoscalerConfig(),
+		15*time.Second, // decision interval -- independent of the cooldown windows inside AutoscalerConfig, which bound how often it actually ACTS
+	)
+	go autoscaler.Run(ctx, leaderElector.IsLeader)
 
 	// --- Scheduling loop (doc 5.4) -- leader-gated ---
 	//

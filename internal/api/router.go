@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog"
 
 	"github.com/launchverse/fleetforge/internal/queue"
@@ -12,11 +13,11 @@ import (
 	ffredis "github.com/launchverse/fleetforge/internal/store/redis"
 )
 
-// NewRouter wires the REST surface. As of Day 5 it exposes worker
-// listing/drain/resume, job submission/listing/get, and health checks --
-// /metrics (Day 6) attaches to this same router as it's built, following
+// NewRouter wires the REST surface: worker listing/drain/resume, job
+// submission/listing/get, health checks, and (Day 6) GET /metrics for
+// Prometheus scraping (deploy/prometheus.yml), following
 // docs/02-openapi.yaml's paths one at a time rather than stubbing all of
-// them today.
+// them up front.
 func NewRouter(
 	workerStore *postgres.WorkerStore,
 	jobStore *postgres.JobStore,
@@ -42,6 +43,12 @@ func NewRouter(
 		r.Get("/jobs", jobs.ListJobs)
 		r.Get("/jobs/{jobId}", jobs.GetJob)
 	})
+
+	// Uses the default Prometheus registry/gatherer -- internal/metrics's
+	// collectors are registered against prometheus.DefaultRegisterer once
+	// in cmd/scheduler/main.go, so this handler needs no explicit registry
+	// wiring of its own.
+	r.Get("/metrics", promhttp.Handler().ServeHTTP)
 
 	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)

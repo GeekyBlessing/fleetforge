@@ -1,9 +1,13 @@
 version: "3.9"
 
-# Day 1 scope: postgres + redis only, enough for the registration flow.
-# The scheduler/worker-agent/prometheus/grafana services are added back in
-# as their Dockerfiles land (Day 2 onward) -- see the commented block at the
-# bottom for what's coming so the shape of the final file is visible now.
+# Day 1 gave this file postgres + redis. Day 6 adds prometheus + grafana
+# (see deploy/prometheus.yml and deploy/grafana/) for the metrics/dashboard
+# story. The scheduler and worker-agent binaries themselves still run on
+# the HOST via `go run` throughout local dev -- see deploy/prometheus.yml's
+# comment on why its scrape target is host.docker.internal, not a compose
+# service name. A Dockerfile.scheduler for actually containerizing the
+# scheduler is a later, deployment-time concern (docs/07-repository-structure.md),
+# not required to develop against this stack.
 
 services:
   postgres:
@@ -51,26 +55,37 @@ services:
         "up"
       ]
 
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - promdata:/prometheus
+    ports:
+      # 9091 on the host, not 9090 -- 9090 is already the scheduler's own
+      # gRPC port on the host (cfg.GRPCAddr), so this avoids a collision.
+      - "9091:9090"
+    extra_hosts:
+      # Needed on Linux hosts for host.docker.internal to resolve at all;
+      # a no-op on Docker Desktop (macOS/Windows), where it already works.
+      - "host.docker.internal:host-gateway"
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    depends_on:
+      - prometheus
+    environment:
+      # Local dev only -- change before this ever runs anywhere real.
+      GF_SECURITY_ADMIN_PASSWORD: fleetforge_dev_only
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafanadata:/var/lib/grafana
+    ports:
+      - "3000:3000"
+
 volumes:
   pgdata:
-
-# ---------------------------------------------------------------------------
-# Coming in Day 2+ (kept here as a preview so the target shape is clear):
-#
-#   scheduler:
-#     build: { context: .., dockerfile: deploy/Dockerfile.scheduler }
-#     depends_on: [postgres, redis, migrate]
-#     environment:
-#       FLEETFORGE_DATABASE_URL: postgres://fleetforge:fleetforge_dev_only@postgres:5432/fleetforge
-#       FLEETFORGE_REDIS_ADDR: redis:6379
-#     ports: ["8080:8080", "9090:9090"]   # REST, gRPC
-#
-#   prometheus:
-#     image: prom/prometheus:v2.51.0
-#     volumes: ["./prometheus.yml:/etc/prometheus/prometheus.yml"]
-#     ports: ["9091:9090"]
-#
-#   grafana:
-#     image: grafana/grafana:10.4.0
-#     ports: ["3000:3000"]
-# ---------------------------------------------------------------------------
+  promdata:
+  grafanadata:
