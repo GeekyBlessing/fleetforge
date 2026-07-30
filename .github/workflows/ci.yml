@@ -1,44 +1,65 @@
-name: ci
+name: CI
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   pull_request:
 
 jobs:
   lint:
+    name: Lint
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
           go-version: "1.25"
-      - uses: golangci/golangci-lint-action@v8
+
+      - name: Verify Go version
+        run: go version
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v8
         with:
           version: latest
 
   unit:
+    name: Unit Tests
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
           go-version: "1.25"
-      - run: go build ./...
-      - run: go test ./... -short -race -count=1 -coverprofile=coverage.out
-      - uses: actions/upload-artifact@v4
-        with:
-          name: coverage
-          path: coverage.out
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run unit tests
+        run: go test ./... -short -count=1 -v
 
   integration:
+    name: Integration Tests
     runs-on: ubuntu-latest
-    # Postgres/Redis are started by testcontainers from inside the Go test
-    # process itself (see test/integration), so we only need Docker-in-Docker,
-    # which GitHub-hosted runners provide by default -- no services: block needed.
+
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
           go-version: "1.25"
-      - run: go test ./test/integration/... -race -count=1 -tags=integration -timeout=5m
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run integration tests
+        run: |
+          go test ./test/integration/... -count=1 -v
