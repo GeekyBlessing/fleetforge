@@ -109,6 +109,27 @@ func (a *agentState) isDraining() bool {
 	return a.draining
 }
 
+// clearDraining undoes setDraining once the scheduler stops requesting
+// drain (an operator called ResumeDrain). Real gap, caught by actually
+// running this: without this method, there was NO code path that ever
+// flipped agentState.draining back to false -- the receive loop only ever
+// called setDraining() when DrainRequested was true, with no corresponding
+// "else" for when it goes back to false. A resumed worker would keep
+// silently refusing every future assignment as "received assignment while
+// draining, ignoring" forever, even though the SERVER correctly considered
+// it READY again. Returns true only the first time, same log-once pattern
+// as setDraining.
+func (a *agentState) clearDraining() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	was := a.draining
+	a.draining = false
+	if was && a.currentJobID == "" {
+		a.status = fleetforgev1.WorkerStatus_WORKER_STATUS_READY
+	}
+	return was
+}
+
 func main() {
 	log := zerolog.New(os.Stdout).With().Timestamp().Str("service", "worker-agent").Logger()
 
@@ -260,6 +281,8 @@ func streamHeartbeats(ctx context.Context, d heartbeatDeps) error {
 				if d.state.setDraining() {
 					d.log.Info().Msg("scheduler requested drain -- finishing current job (if any) and refusing new assignments")
 				}
+			} else if d.state.clearDraining() {
+				d.log.Info().Msg("drain resumed by scheduler -- accepting new assignments again")
 			}
 		}
 	}()

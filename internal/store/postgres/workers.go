@@ -547,27 +547,45 @@ var errJobAssignRaceLost = errors.New("assign: job no longer queued")
 // caller mirrors this returned status straight into the Redis cache -- same
 // dual-write reasoning as the availableCapacity return value already had.
 func (s *WorkerStore) FreeWorker(ctx context.Context, workerID string, epoch int64) (ok bool, availableCapacity int32, newStatus string, err error) {
-	// Real bug, caught by actually running this: both CASE branches here are
-	// bare string literals with no column reference to anchor a type to, so
-	// Postgres infers the whole CASE expression as `text` -- which then
-	// can't be assigned into the `status` column (worker_status enum)
-	// without an explicit cast (SQLSTATE 42804, "column is of type
-	// worker_status but expression is of type text"). Same class of enum
-	// vs. text inference gap as the interval-arithmetic bug in ListStale;
-	// the fix here is the same shape: cast the literals explicitly instead
-	// of leaving Postgres to guess.
+	// Real bug, caught by actually running this (a genuine race, not a
+	// typo): this used to also require `status = 'BUSY'` in the WHERE
+	// clause. UpdateHeartbeat (internal/grpcserver/heartbeat.go) writes
+	// whatever status the WORKER itself last self-reported on every single
+	// heartbeat, completely independent of what AssignJob/FreeWorker do to
+	// the same row. The very first heartbeat after an assignment always
+	// reports "READY, no job" (the worker doesn't know about the job yet --
+	// that's what the push in heartbeat.go's RESPONSE is for), and if that
+	// heartbeat's Postgres flush lands in the same window, it briefly
+	// overwrites status back to READY while available_capacity is still 0
+	// from AssignJob's decrement. If a job's completion report happened to
+	// land during that exact window, requiring status='BUSY' here made
+	// this UPDATE match zero rows -- silently leaking a capacity slot
+	// forever (status self-corrects on the worker's next heartbeat, but
+	// nothing ever re-runs this increment). A worker stuck at
+	// status=READY, available_capacity=0 is invisible to
+	// ListReadyCandidates permanently, which is exactly what stalled the
+	// job queue live during testing.
+	//
+	// The fix: don't gate on status at all. The real proof that this is a
+	// legitimate completion already happened one level up -- Complete/
+	// RetryOrFail's guard (assignment_epoch matches AND job.status IN
+	// (ASSIGNED,RUNNING)) is a one-shot transition per job, and
+	// report_result.go only calls FreeWorker when that already succeeded.
+	// All FreeWorker needs to check is that this worker hasn't since
+	// re-registered under a new epoch (which WOULD mean a totally
+	// different worker-generation, e.g. after being reaped and restarted).
 	row := s.pool.QueryRow(ctx, `
 		UPDATE workers
 		SET status = CASE WHEN drain_requested THEN 'DRAINING'::worker_status ELSE 'READY'::worker_status END,
 		    current_job_id = NULL,
 		    current_job_created_at = NULL,
 		    available_capacity = LEAST(available_capacity + 1, capacity_slots)
-		WHERE id = $1 AND epoch = $2 AND status = 'BUSY'
+		WHERE id = $1 AND epoch = $2
 		RETURNING available_capacity, status
 	`, workerID, epoch)
 	if scanErr := row.Scan(&availableCapacity, &newStatus); scanErr != nil {
 		if errors.Is(scanErr, pgx.ErrNoRows) {
-			return false, 0, "", nil // epoch mismatch or wasn't BUSY -- not an error, just nothing to free
+			return false, 0, "", nil // epoch mismatch (worker re-registered since) -- not an error, just nothing to free
 		}
 		return false, 0, "", fmt.Errorf("free worker: %w", scanErr)
 	}

@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -143,8 +144,26 @@ func (l *Loop) processMessage(ctx context.Context, streamKey string, msg goredis
 
 	job, err := l.jobs.Get(ctx, jobID)
 	if err != nil {
-		l.log.Warn().Err(err).Str("job_id", jobID).Msg("job not found (likely cancelled), acking and dropping from queue")
-		l.ack(ctx, streamKey, msg.ID)
+		if errors.Is(err, postgres.ErrJobNotFound) {
+			// Genuinely gone (never existed under this ID, or some future
+			// hard-delete path) -- safe to drop for good.
+			l.log.Warn().Str("job_id", jobID).Msg("job not found, acking and dropping from queue")
+			l.ack(ctx, streamKey, msg.ID)
+			return
+		}
+		// Real bug, caught by actually running this: this used to treat
+		// EVERY error from Get (including a transient Postgres blip -- a
+		// connection pool hiccup, a brief reconnect after restarting the
+		// scheduler mid-test, anything) as "job was cancelled, safe to drop
+		// forever." A transient error acked-and-dropped the message anyway,
+		// permanently orphaning an otherwise-perfectly-valid QUEUED job:
+		// its Postgres row stayed QUEUED forever, but nothing would ever
+		// see it again, since its one and only stream entry was gone from
+		// the consumer group's pending list. Only a genuine "not found" (the
+		// branch above) should ever drop a message; anything else needs to
+		// stay unacked and retry next tick, same as the ListReadyCandidates/
+		// AssignJob error paths below already correctly do.
+		l.log.Error().Err(err).Str("job_id", jobID).Msg("failed to load job, leaving unacked to retry next tick")
 		return
 	}
 	if job.Status != "QUEUED" {
