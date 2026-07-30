@@ -1,11 +1,11 @@
-// fleetforgectl is the operator CLI. Day 1 gives it just enough to visually
-// confirm "did registration actually work" (`fleetforgectl workers list`),
-// using a plain net/http call against GET /v1/workers.
+// fleetforgectl is the operator CLI: worker listing (`fleetforgectl workers
+// list`) and the drain/resume lifecycle (`fleetforgectl workers
+// drain|resume <id>`), each a plain net/http call against the REST API.
 //
 // docs/07-repository-structure.md calls for pkg/fleetforgeclient, a client
 // generated from openapi.yaml, to back this CLI eventually -- deferred
-// until more than one endpoint exists, since generating a client for a
-// single-endpoint API is more scaffolding than the CLI itself.
+// until the REST surface stabilizes further, since generating a client
+// against a still-growing API is more scaffolding than the CLI itself.
 package main
 
 import (

@@ -1,4 +1,4 @@
--- Day 5: worker draining (docs/09-design-rationale.md, operator-initiated
+-- Worker draining (docs/09-design-rationale.md, operator-initiated
 -- graceful removal). drain_requested is deliberately a SEPARATE column from
 -- `status`, not folded entirely into the existing DRAINING enum value: a
 -- worker that's BUSY when drain is requested must keep reporting BUSY (it's

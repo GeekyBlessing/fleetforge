@@ -13,8 +13,8 @@ import (
 
 // ConsumerGroup is the single shared consumer group all scheduler replicas
 // join (docs/04-redis-data-model.md 4.1) -- only the elected leader
-// actively reads from it (wired in Day 4), but the group itself is created
-// up front so Day 4 doesn't need a migration-like bootstrap step of its own.
+// actively reads from it, but the group itself is created up front so the
+// consumer loop doesn't need a migration-like bootstrap step of its own.
 const ConsumerGroup = "schedulers"
 
 // StreamQueue implements queue.Backend using Redis Streams -- one stream
@@ -29,8 +29,8 @@ func NewStreamQueue(client *goredis.Client) *StreamQueue {
 }
 
 // StreamKey returns the Redis Streams key for a given priority (0=highest,
-// 9=lowest). Exported so Day 4's consumer loop can iterate priorities 0..9
-// without duplicating this naming convention.
+// 9=lowest). Exported so the scheduler's consumer loop can iterate
+// priorities 0..9 without duplicating this naming convention.
 func StreamKey(priority int16) string {
 	return "queue:jobs:p" + strconv.Itoa(int(priority))
 }

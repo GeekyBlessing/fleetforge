@@ -130,9 +130,9 @@ func jobStatusToDB(js fleetforgev1.JobStatus) string {
 	case fleetforgev1.JobStatus_JOB_STATUS_CANCELLED:
 		return "CANCELLED"
 	default:
-		// Day 4 scope: only terminal outcomes are reported by
-		// ReportJobResult; RETRYING is a scheduler-driven transition
-		// (Day 5), not something the worker itself declares.
+		// Only terminal outcomes are reported by ReportJobResult;
+		// RETRYING is a scheduler-driven transition, not something the
+		// worker itself declares.
 		return "FAILED"
 	}
 }

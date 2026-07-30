@@ -16,4 +16,4 @@ make integration-test
 
 ## Status
 
-Day 1 of the 7-day plan (see `docs/08-implementation-roadmap.md`): repo scaffold, Postgres schema, worker registration over gRPC.
+Implemented: worker registration, heartbeat/liveness tracking and dead-worker reaping, job submission and queueing, capability-aware least-loaded scheduling, retry-with-backoff and worker draining, Prometheus metrics with a Grafana dashboard, and an autoscaler implementing the hysteresis/cooldown logic in `docs/09-design-rationale.md`. Remaining: mTLS/JWT security, load and chaos testing, CI polish (see `docs/08-implementation-roadmap.md`).

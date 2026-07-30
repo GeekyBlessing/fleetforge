@@ -49,15 +49,14 @@ func NewServer(
 
 // RegisterWorker implements docs/05-sequence-diagrams.md section 5.1.
 //
-// Known, deliberate gaps at Day 1 (both called out explicitly rather than
-// silently skipped, and both tracked against the roadmap):
-//   - No mTLS/bootstrap-JWT verification yet -- that's docs/09 section 9.4,
-//     scheduled for Day 7. Wiring it in means adding a grpc.UnaryServerInterceptor
-//     in cmd/scheduler/main.go; this handler doesn't need to change.
+// Known, deliberate gaps (both called out explicitly rather than silently
+// skipped, and both tracked against the roadmap):
+//   - No mTLS/bootstrap-JWT verification yet -- that's docs/09 section 9.4.
+//     Wiring it in means adding a grpc.UnaryServerInterceptor in
+//     cmd/scheduler/main.go; this handler doesn't need to change.
 //   - No Redis-backed registration rate limiting yet (docs/04-redis-data-model.md
-//     4.4) -- Redis isn't introduced until Day 2's heartbeat work, and Day 1
-//     shouldn't take on a dependency it doesn't need yet to prove out
-//     registration.
+//     4.4) -- registration doesn't need it to be correct, and adding it is a
+//     contained change to this one handler.
 func (s *Server) RegisterWorker(
 	ctx context.Context,
 	req *fleetforgev1.RegisterWorkerRequest,

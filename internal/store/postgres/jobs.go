@@ -63,7 +63,7 @@ var ErrJobNotFound = errors.New("job not found")
 // dedicated, non-partitioned job_idempotency_keys(idempotency_key PK,
 // job_id) lookup table checked/inserted in the same transaction as job
 // creation -- flagged in docs/09-design-rationale.md as a pre-production
-// follow-up rather than solved here, given the 7-day scope.
+// follow-up rather than solved here, given the current scope.
 func (s *JobStore) Create(ctx context.Context, p CreateJobParams) (job Job, wasExisting bool, err error) {
 	if p.Labels == nil {
 		p.Labels = map[string]string{}
@@ -144,9 +144,9 @@ func (s *JobStore) Get(ctx context.Context, jobID string) (Job, error) {
 	return j, nil
 }
 
-// CountQueuedByPriority backs internal/metrics's queue-depth gauge (Day 6)
-// -- a single GROUP BY rather than 10 separate List(status=QUEUED,
-// priority=N) calls, since this runs on every Collector tick.
+// CountQueuedByPriority backs internal/metrics's queue-depth gauge -- a
+// single GROUP BY rather than 10 separate List(status=QUEUED, priority=N)
+// calls, since this runs on every Collector tick.
 func (s *JobStore) CountQueuedByPriority(ctx context.Context) (map[int16]int32, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT priority, COUNT(*) FROM jobs WHERE status = 'QUEUED' GROUP BY priority

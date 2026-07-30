@@ -47,8 +47,8 @@ func NewReaper(
 // Run blocks until ctx is cancelled, sweeping on a fixed interval as long
 // as isLeader() reports true.
 //
-// Gating on leadership (added Day 4, alongside internal/scheduler/leader.go)
-// matters more for correctness-adjacent efficiency than correctness itself
+// Gating on leadership (internal/scheduler/leader.go) matters more for
+// correctness-adjacent efficiency than correctness itself
 // -- MarkDeadAndRequeue's epoch-guarded UPDATE already makes a second
 // concurrent reaper's attempt a harmless no-op (RowsAffected()==0), but
 // letting every replica hammer the same query every 5s is still wasted

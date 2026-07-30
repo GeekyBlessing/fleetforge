@@ -59,10 +59,14 @@ type jobListResponse struct {
 
 // SubmitJob implements POST /jobs (docs/02-openapi.yaml). Writes the job to
 // Postgres first (durable, source of truth) and only enqueues to Redis
-// once that succeeds -- if the enqueue fails, the job still exists as
-// QUEUED in Postgres and Day 4's scheduler-side Postgres fallback path
-// (docs/06-failure-scenarios.md #4) will still find and schedule it, just
-// on a slower polling cadence instead of via the stream.
+// once that succeeds. Known gap: if the enqueue itself fails, the job
+// still exists as QUEUED in Postgres, but nothing currently re-scans
+// Postgres for QUEUED jobs missing a stream entry -- there's no periodic
+// fallback poller yet (docs/06-failure-scenarios.md #4 describes the
+// intended behavior; internal/scheduler/loop.go's error handling protects
+// against a message being dropped AFTER it reaches the stream, not against
+// it never arriving in the first place). A dedicated reconciliation poller
+// is the fix, tracked as a follow-up rather than solved here.
 func (h *JobsHandler) SubmitJob(w http.ResponseWriter, r *http.Request) {
 	var req submitJobRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

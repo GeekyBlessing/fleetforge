@@ -122,9 +122,9 @@ func (s *WorkerStore) Register(ctx context.Context, p RegisterWorkerParams) (Reg
 		// Two statements rather than folding READY into the upsert above
 		// because the audit event should record the transition, and doing it
 		// as a distinct step keeps this method's shape identical to how the
-		// reaper (Day 2) will similarly do "state change + event insert" as a
-		// pair -- one consistent pattern across the codebase for "on top of
-		// a state change, always drop a breadcrumb".
+		// reaper similarly does "state change + event insert" as a pair --
+		// one consistent pattern across the codebase for "on top of a state
+		// change, always drop a breadcrumb".
 		if _, err := tx.Exec(ctx, `UPDATE workers SET status = 'READY' WHERE id = $1`, result.ID); err != nil {
 			return fmt.Errorf("promote worker to ready: %w", err)
 		}
@@ -158,8 +158,8 @@ type WorkerRow struct {
 	DrainRequested      bool
 }
 
-// CountByStatus backs internal/metrics's worker-count gauge (Day 6) --
-// one GROUP BY rather than 6 separate List(status=X) calls.
+// CountByStatus backs internal/metrics's worker-count gauge -- one GROUP BY
+// rather than 6 separate List(status=X) calls.
 func (s *WorkerStore) CountByStatus(ctx context.Context) (map[string]int32, error) {
 	rows, err := s.pool.Query(ctx, `SELECT status, COUNT(*) FROM workers GROUP BY status`)
 	if err != nil {
@@ -206,9 +206,9 @@ func (s *WorkerStore) PickDrainCandidate(ctx context.Context) (string, error) {
 
 // List returns workers matching an optional status filter, most-recently
 // registered first, capped at limit. Cursor-based pagination (per
-// docs/02-openapi.yaml) is a real gap here -- Day 1 ships offset-free "first
-// N" semantics because the fleet is small during initial development; doc 2's
-// full keyset pagination lands whenever list traffic actually needs it.
+// docs/02-openapi.yaml) is a real gap here -- offset-free "first N"
+// semantics are enough while the fleet stays small; doc 2's full keyset
+// pagination lands whenever list traffic actually needs it.
 func (s *WorkerStore) List(ctx context.Context, statusFilter string, limit int) ([]WorkerRow, error) {
 	if limit <= 0 || limit > 1000 {
 		limit = 100
@@ -475,7 +475,7 @@ type Candidate struct {
 // (correctness) and "which legal candidate is best" (optimization) stay
 // untangled.
 //
-// Day 4 scope note: this queries Postgres directly rather than scanning
+// Known scope note: this queries Postgres directly rather than scanning
 // the Redis worker:*:state hashes doc 4.2 describes as the scheduler's hot
 // path. Querying Postgres (via idx_workers_status_ready) is simpler and
 // still fast at this fleet size; switching the read side to Redis is a

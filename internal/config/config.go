@@ -23,8 +23,9 @@ type SchedulerConfig struct {
 }
 
 // LoadSchedulerConfig reads configuration from the environment. Only
-// FLEETFORGE_DATABASE_URL is required for Day 1 (Redis isn't touched until
-// Day 2, so we don't fail startup over a missing Redis address yet).
+// FLEETFORGE_DATABASE_URL is required -- a missing Redis address doesn't
+// fail startup, since Postgres alone is enough to serve reads/registration
+// even if Redis is unreachable (docs/06-failure-scenarios.md #4).
 func LoadSchedulerConfig() (SchedulerConfig, error) {
 	cfg := SchedulerConfig{
 		DatabaseURL: os.Getenv("FLEETFORGE_DATABASE_URL"),
@@ -74,7 +75,7 @@ func LoadWorkerAgentConfig() (WorkerAgentConfig, error) {
 		InstanceID:        os.Getenv("FLEETFORGE_INSTANCE_ID"),
 		Hostname:          getEnvDefault("FLEETFORGE_HOSTNAME", hostname),
 		OS:                getEnvDefault("FLEETFORGE_OS", "linux/amd64"),
-		Version:           getEnvDefault("FLEETFORGE_AGENT_VERSION", "0.1.0-day1"),
+		Version:           getEnvDefault("FLEETFORGE_AGENT_VERSION", "0.1.0"),
 	}
 
 	if cfg.InstanceID == "" {
@@ -105,7 +106,7 @@ func LoadWorkerAgentConfig() (WorkerAgentConfig, error) {
 	cfg.Labels = parseLabels(os.Getenv("FLEETFORGE_LABELS"))
 	cfg.Capabilities = parseList(os.Getenv("FLEETFORGE_CAPABILITIES"))
 
-	cfg.SimulatedFailureRate = 0.15 // default: enough real failures to exercise Day 5's retry policy without every job failing
+	cfg.SimulatedFailureRate = 0.15 // default: enough real failures to exercise the retry policy without every job failing
 	if raw := os.Getenv("FLEETFORGE_SIMULATED_FAILURE_RATE"); raw != "" {
 		rate, err := strconv.ParseFloat(raw, 64)
 		if err != nil {

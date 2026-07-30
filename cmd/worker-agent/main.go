@@ -1,10 +1,10 @@
 // cmd/worker-agent: registers once, then holds a long-lived bidirectional
 // heartbeat stream open for the life of the process
-// (docs/05-sequence-diagrams.md 5.2). As of Day 4, receiving a job
-// assignment on that stream triggers real execution (worker-agent-runtime)
-// and a ReportJobResult call back to the scheduler. As of Day 5, a
-// DrainRequested=true on that same stream (see agentState.setDraining)
-// makes this agent finish its current job (if any) and then report itself
+// (docs/05-sequence-diagrams.md 5.2). Receiving a job assignment on that
+// stream triggers real execution (worker-agent-runtime) and a
+// ReportJobResult call back to the scheduler. A DrainRequested=true on that
+// same stream (see agentState.setDraining) makes this agent finish its
+// current job (if any) and then report itself
 // as DRAINING instead of READY -- it keeps heartbeating (so an operator can
 // still see it and its eventual OFFLINE/DEAD transition), it just never
 // accepts new work again. There is no self-initiated process exit here;
@@ -142,9 +142,8 @@ func main() {
 	defer stop()
 
 	// insecure.NewCredentials() is correct for local dev only. mTLS
-	// replaces this in Day 7 (docs/09-design-rationale.md 9.4) -- swapping
-	// it is a change to this one Dial call, not to anything else in the
-	// agent.
+	// replaces this per docs/09-design-rationale.md 9.4 -- swapping it is a
+	// change to this one Dial call, not to anything else in the agent.
 	conn, err := grpc.NewClient(cfg.SchedulerGRPCAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatal().Err(err).Str("addr", cfg.SchedulerGRPCAddr).Msg("failed to dial scheduler")
@@ -233,8 +232,8 @@ type heartbeatDeps struct {
 // streamHeartbeats implements the worker side of
 // docs/05-sequence-diagrams.md 5.2: one long-lived bidirectional stream, a
 // HeartbeatRequest sent every `interval`, and a background goroutine
-// reading whatever the scheduler sends back -- including, as of Day 4, a
-// pending job assignment.
+// reading whatever the scheduler sends back -- including a pending job
+// assignment.
 func streamHeartbeats(ctx context.Context, d heartbeatDeps) error {
 	stream, err := d.client.Heartbeat(ctx)
 	if err != nil {
@@ -317,9 +316,9 @@ func streamHeartbeats(ctx context.Context, d heartbeatDeps) error {
 
 // runAssignment executes one job and reports the result. It runs in its
 // own goroutine so the heartbeat send/receive loop is never blocked on
-// build execution -- a worker must keep heartbeating (and would need to
-// keep receiving future drain signals, Day 5) while a job is RUNNING, not
-// go silent for the length of the build.
+// build execution -- a worker must keep heartbeating (and receiving any
+// drain signal) while a job is RUNNING, not go silent for the length of
+// the build.
 func runAssignment(ctx context.Context, d heartbeatDeps, a *fleetforgev1.JobAssignment) {
 	result := d.executor.Execute(ctx, agentruntime.Assignment{
 		JobID:      a.GetJobId(),

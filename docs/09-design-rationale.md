@@ -20,9 +20,9 @@ queue order = priority (0 highest) then FIFO within a priority                  
 
 **Why priority is a queue-ordering concern, not a per-job scoring concern.** Priority (0-9) determines *which job gets looked at first* (per-priority Redis streams, drained highest-first, doc 4.1) — it does not change which worker a job is allowed to land on. Keeping these orthogonal (queue order vs. candidate filtering) keeps the algorithm easy to reason about: you can explain "why did job X get worker Y" without needing to know anything about priority, and separately explain "why did job X get looked at before job Z" without needing to know anything about capability matching.
 
-**Build order across the week (Day 4):** capability matching first (it's a correctness requirement — assigning to an incapable worker isn't a suboptimal choice, it's a bug), then priority-ordered queue draining (cheap, just stream read order), then least-loaded ranking (the one part that benefits from real load-test data to tune, so it's easiest to get right last, after Day 4's benchmark exists to validate against).
+**Build order (Milestone 4):** capability matching first (it's a correctness requirement — assigning to an incapable worker isn't a suboptimal choice, it's a bug), then priority-ordered queue draining (cheap, just stream read order), then least-loaded ranking (the one part that benefits from real load-test data to tune, so it's easiest to get right last, after the scheduler benchmark exists to validate against).
 
-**What I'd add later, explicitly not in the 7-day scope:** true affinity/anti-affinity rules beyond simple label-equality matching (e.g. "prefer a worker that already has this repo's Docker layer cache warm" — this requires tracking cache-locality state per worker, which is a real optimization for build systems specifically, akin to Bazel remote-cache-aware scheduling, but it's a substantial feature on its own).
+**What I'd add later, explicitly not in the current scope:** true affinity/anti-affinity rules beyond simple label-equality matching (e.g. "prefer a worker that already has this repo's Docker layer cache warm" — this requires tracking cache-locality state per worker, which is a real optimization for build systems specifically, akin to Bazel remote-cache-aware scheduling, but it's a substantial feature on its own).
 
 ## 9.2 Autoscaling logic — signals and oscillation avoidance
 
@@ -54,7 +54,7 @@ queue order = priority (0 highest) then FIFO within a priority                  
 
 ## 9.5 Testing strategy summary
 
-Full detail belongs in `test/` and CI config (doc 7), but the shape: **unit tests** cover pure logic with no I/O (scheduling algorithm filtering/ranking, backoff calculation, idempotency key logic) — fast, run on every save. **Integration tests** use real Postgres + Redis via testcontainers (not mocks) for anything touching the CAS assignment transaction or the reaper sweep — this is the layer that actually validates the correctness guarantees in doc 6, so it's not optional scope. **Load tests** (Locust, Day 7) establish the actual numbers behind claims like "handles 10,000 workers" — a plan without a number attached is a guess. **Chaos tests** automate exactly the scenarios in doc 6 (kill the leader mid-assignment, partition a worker, kill Redis, kill Postgres) and assert recovery within documented bounds — this is what turns doc 6 from a design claim into a verified property of the actual code.
+Full detail belongs in `test/` and CI config (doc 7), but the shape: **unit tests** cover pure logic with no I/O (scheduling algorithm filtering/ranking, backoff calculation, idempotency key logic) — fast, run on every save. **Integration tests** use real Postgres + Redis via testcontainers (not mocks) for anything touching the CAS assignment transaction or the reaper sweep — this is the layer that actually validates the correctness guarantees in doc 6, so it's not optional scope. **Load tests** (Locust, Milestone 7) establish the actual numbers behind claims like "handles 10,000 workers" — a plan without a number attached is a guess. **Chaos tests** automate exactly the scenarios in doc 6 (kill the leader mid-assignment, partition a worker, kill Redis, kill Postgres) and assert recovery within documented bounds — this is what turns doc 6 from a design claim into a verified property of the actual code.
 
 ## 9.6 Summary of major decisions
 
@@ -70,11 +70,11 @@ Full detail belongs in `test/` and CI config (doc 7), but the shape: **unit test
 
 ## 9.7 Open questions before we proceed to code
 
-1. **Log storage backend.** Doc 3 assumes `log_ref` points to external object storage (S3-compatible). Do you have a preferred bucket/MinIO setup already, or should Day 4's implementation default to local-disk-with-a-documented-swap-point?
+1. **Log storage backend.** Doc 3 assumes `log_ref` points to external object storage (S3-compatible). Do you have a preferred bucket/MinIO setup already, or should the initial implementation default to local-disk-with-a-documented-swap-point?
 2. **Cloud provider for autoscaling.** Doc 9.2/doc 7 stub an AWS ASG provider as the concrete example — confirm that's the right target (vs. GCP, Nomad, or a purely on-prem/manual fleet where the autoscaler is a no-op that only emits recommendations).
-3. **Realistic load-test target for Day 7.** I proposed 500-1,000 simulated workers as the in-week validated number, with the 10,000 figure treated as a documented extrapolation rather than something actually spun up in 7 days — confirm that's an acceptable framing for the assignment's grading criteria.
-4. **Any existing LaunchVerse infra to integrate with** (an existing Postgres cluster, an existing secrets manager for the mTLS CA, an existing CI system whose webhook should call `POST /jobs`) that should shape Day 1's scaffold rather than assuming a from-scratch docker-compose environment.
+3. **Realistic load-test target.** I proposed 500-1,000 simulated workers as the validated number, with the 10,000 figure treated as a documented extrapolation rather than something actually spun up during implementation — confirm that's an acceptable framing for the assignment's grading criteria.
+4. **Any existing LaunchVerse infra to integrate with** (an existing Postgres cluster, an existing secrets manager for the mTLS CA, an existing CI system whose webhook should call `POST /jobs`) that should shape the initial scaffold rather than assuming a from-scratch docker-compose environment.
 
 ---
 
-This closes the mandatory Phase 1 deliverables (docs 1-9, plus the 00-README index). I have not written any implementation code. Review, push back on anything, answer 9.7 if you can — once you say go, Day 1 starts.
+This closes the mandatory Phase 1 deliverables (docs 1-9, plus the 00-README index). I have not written any implementation code. Review, push back on anything, answer 9.7 if you can — once you say go, implementation starts.

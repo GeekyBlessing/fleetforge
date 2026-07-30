@@ -21,9 +21,9 @@ import (
 const pgFlushCoalesceInterval = 15 * time.Second
 
 // Heartbeat implements the bidirectional stream from
-// docs/05-sequence-diagrams.md 5.2. As of Day 4 it also pushes pending job
-// assignments (see handleHeartbeat). As of Day 5, HeartbeatResponse.DrainRequested
-// reflects the worker's drain_requested flag (internal/api/handlers_workers.go's
+// docs/05-sequence-diagrams.md 5.2. It also pushes pending job assignments
+// (see handleHeartbeat), and HeartbeatResponse.DrainRequested reflects the
+// worker's drain_requested flag (internal/api/handlers_workers.go's
 // drain/resume endpoints), so the worker-agent itself can stop reporting
 // READY once notified.
 func (s *Server) Heartbeat(stream fleetforgev1.FleetScheduler_HeartbeatServer) error {
@@ -99,7 +99,7 @@ func (s *Server) handleHeartbeat(ctx context.Context, req *fleetforgev1.Heartbea
 	newStatus := workerStatusToDB(req.GetStatus())
 	currentJobID := req.GetCurrentJobId()
 
-	// Assignment push (Day 4): the assignment transaction
+	// Assignment push: the assignment transaction
 	// (WorkerStore.AssignJob) already flipped this worker to BUSY with a
 	// current_job_id in Postgres/cache -- if the WORKER doesn't know about
 	// it yet (it's still reporting READY with no current_job_id), this is

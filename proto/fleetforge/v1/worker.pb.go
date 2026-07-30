@@ -23,7 +23,7 @@ const (
 
 // Mirrors the `worker_status` Postgres enum (docs/03-database-schema.md) --
 // keep these two definitions in lockstep by hand for now; a codegen check
-// that diffs them is a reasonable Day 7 addition, not a Day 1 one.
+// that diffs them is a reasonable later addition, not a foundational one.
 type WorkerStatus int32
 
 const (

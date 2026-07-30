@@ -1,8 +1,9 @@
 version: "3.9"
 
-# Day 1 gave this file postgres + redis. Day 6 adds prometheus + grafana
-# (see deploy/prometheus.yml and deploy/grafana/) for the metrics/dashboard
-# story. The scheduler and worker-agent binaries themselves still run on
+# Local dev stack: postgres + redis for the core services, plus prometheus
+# and grafana (see deploy/prometheus.yml and deploy/grafana/) for the
+# metrics/dashboard story. The scheduler and worker-agent binaries themselves
+# still run on
 # the HOST via `go run` throughout local dev -- see deploy/prometheus.yml's
 # comment on why its scrape target is host.docker.internal, not a compose
 # service name. A Dockerfile.scheduler for actually containerizing the

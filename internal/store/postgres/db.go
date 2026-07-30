@@ -28,7 +28,7 @@ func NewPool(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 	// many slow queries -- a large pool here just moves contention from
 	// the application to Postgres's own max_connections. 20 is a
 	// deliberately conservative starting point per scheduler replica;
-	// revisit with real numbers once the Day 7 load test exists.
+	// revisit with real numbers once a load test exists.
 	cfg.MaxConns = 20
 	cfg.MaxConnLifetime = 30 * time.Minute
 

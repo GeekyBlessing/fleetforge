@@ -40,14 +40,9 @@ type FleetSchedulerClient interface {
 	// agent process. Worker -> scheduler: liveness + status every 5s.
 	// Scheduler -> worker: job assignments, drain signals, forced re-register
 	// (on epoch mismatch). See docs/05-sequence-diagrams.md 5.2.
-	//
-	// Implemented Day 2 -- defined now so the contract is fixed before either
-	// side is built against it.
 	Heartbeat(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[HeartbeatRequest, HeartbeatResponse], error)
 	// Worker reports a finished (or cancelled) job. Idempotent / epoch-guarded
 	// per docs/05-sequence-diagrams.md 5.4 and docs/06-failure-scenarios.md #10.
-	//
-	// Implemented Day 4.
 	ReportJobResult(ctx context.Context, in *ReportJobResultRequest, opts ...grpc.CallOption) (*ReportJobResultResponse, error)
 }
 
@@ -108,14 +103,9 @@ type FleetSchedulerServer interface {
 	// agent process. Worker -> scheduler: liveness + status every 5s.
 	// Scheduler -> worker: job assignments, drain signals, forced re-register
 	// (on epoch mismatch). See docs/05-sequence-diagrams.md 5.2.
-	//
-	// Implemented Day 2 -- defined now so the contract is fixed before either
-	// side is built against it.
 	Heartbeat(grpc.BidiStreamingServer[HeartbeatRequest, HeartbeatResponse]) error
 	// Worker reports a finished (or cancelled) job. Idempotent / epoch-guarded
 	// per docs/05-sequence-diagrams.md 5.4 and docs/06-failure-scenarios.md #10.
-	//
-	// Implemented Day 4.
 	ReportJobResult(context.Context, *ReportJobResultRequest) (*ReportJobResultResponse, error)
 	mustEmbedUnimplementedFleetSchedulerServer()
 }

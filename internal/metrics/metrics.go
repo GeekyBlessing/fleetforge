@@ -1,5 +1,5 @@
 // Package metrics holds every Prometheus collector FleetForge exposes on
-// GET /metrics (docs/02-openapi.yaml's stubbed path, wired for real on Day 6).
+// GET /metrics (docs/02-openapi.yaml's path).
 // Collectors live as package-level vars (the standard client_golang pattern)
 // registered once in cmd/scheduler/main.go, so any package can import
 // internal/metrics and record a measurement without needing a Metrics

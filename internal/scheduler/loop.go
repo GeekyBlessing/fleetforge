@@ -183,10 +183,11 @@ func (l *Loop) processMessage(ctx context.Context, streamKey string, msg goredis
 	chosen := SelectLeastLoaded(candidates)
 	if chosen == nil {
 		// No capable/available worker right now. Left unacked deliberately
-		// -- this is exactly the unmet-demand signal Day 6's autoscaler
-		// watches for (docs/09-design-rationale.md 9.2), and the
-		// pending-entries pass retries it every tick without needing a
-		// separate backlog data structure.
+		// -- this job stays QUEUED in Postgres, which is exactly the
+		// unmet-demand signal the autoscaler watches for
+		// (docs/09-design-rationale.md 9.2), and the pending-entries pass
+		// retries it every tick without needing a separate backlog data
+		// structure.
 		return
 	}
 

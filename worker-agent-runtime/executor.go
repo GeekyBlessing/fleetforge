@@ -1,7 +1,7 @@
 // Package agentruntime implements the actual "run a build" logic invoked
 // by cmd/worker-agent once it receives a job assignment. FleetForge's job
 // is orchestration, not being a build tool itself -- docs/08-implementation-roadmap.md
-// Day 4 calls for "at minimum runs docker run against the job spec"; this
+// calls for "at minimum runs docker run against the job spec"; this
 // package instead ships a SimulatedExecutor that spends real wall-clock
 // time and reports real success/failure, which is enough to exercise the
 // full scheduling/completion/retry pipeline honestly. A real executor
@@ -40,8 +40,8 @@ type Executor interface {
 }
 
 // SimulatedExecutor spends a few real seconds "building" and occasionally
-// reports failure, giving Day 5's retry policy something genuine to
-// exercise instead of an always-green happy path.
+// reports failure, giving the retry policy something genuine to exercise
+// instead of an always-green happy path.
 type SimulatedExecutor struct {
 	// FailureRate is the probability (0.0-1.0) that a given run reports
 	// FAILED. Defaults to 0 (always succeeds) if left unset.

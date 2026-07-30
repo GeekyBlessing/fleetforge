@@ -133,4 +133,4 @@ fleetforge/
 
 ---
 
-**Next:** doc 8, the 7-day roadmap that builds this repository incrementally.
+**Next:** doc 8, the implementation roadmap that builds this repository incrementally.

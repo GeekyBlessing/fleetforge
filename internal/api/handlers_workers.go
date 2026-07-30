@@ -54,8 +54,8 @@ type workerListResponse struct {
 	TotalCount int              `json:"total_count"`
 }
 
-// ListWorkers implements GET /workers. Day 1 supports the `status` and
-// `limit` query params from docs/02-openapi.yaml; `label` filtering and real
+// ListWorkers implements GET /workers, supporting the `status` and `limit`
+// query params from docs/02-openapi.yaml; `label` filtering and real
 // cursor pagination are noted there as a gap to close once list traffic
 // justifies it (docs/03-database-schema.md's GIN index on labels is already
 // in place for when that lands).

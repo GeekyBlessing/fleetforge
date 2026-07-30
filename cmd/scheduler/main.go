@@ -1,6 +1,6 @@
 // cmd/scheduler is the control-plane binary: gRPC server for workers, REST
-// server for humans/CI, the dead-worker reaper, and (as of Day 4) the
-// scheduling loop itself, all gated behind Postgres-advisory-lock leader
+// server for humans/CI, the dead-worker reaper, and the scheduling loop
+// itself, all gated behind Postgres-advisory-lock leader
 // election (docs/09-design-rationale.md 9.6) so that running more than one
 // replica is safe -- only the elected leader reaps or schedules; every
 // replica still serves REST/gRPC traffic.
@@ -86,12 +86,12 @@ func main() {
 	)
 	go reaper.Run(ctx, leaderElector.IsLeader)
 
-	// --- Retry backoff poller (Day 5, docs/09-design-rationale.md 9.3) --
+	// --- Retry backoff poller (docs/09-design-rationale.md 9.3) --
 	// leader-gated, same reasoning as the reaper above.
 	retryPoller := scheduler.NewRetryPoller(jobStore, jobQueue, log, 2*time.Second)
 	go retryPoller.Run(ctx, leaderElector.IsLeader)
 
-	// --- Metrics (Day 6) ---
+	// --- Metrics ---
 	// Registered once, here, against the DEFAULT registry -- promhttp.Handler()
 	// in internal/api/router.go reads from that same default registry/gatherer,
 	// so no Registry object needs to be threaded through main() and the router.
@@ -99,7 +99,7 @@ func main() {
 	metricsCollector := metrics.NewCollector(jobStore, workerStore, log, 10*time.Second)
 	go metricsCollector.Run(ctx)
 
-	// --- Autoscaler (Day 6, docs/09-design-rationale.md 9.2) -- leader-gated ---
+	// --- Autoscaler (docs/09-design-rationale.md 9.2) -- leader-gated ---
 	autoscaler := scheduler.NewAutoscaler(
 		workerStore,
 		jobStore,

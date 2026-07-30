@@ -1,6 +1,6 @@
 // Package redis wraps the Redis-backed pieces described in
 // docs/04-redis-data-model.md: the hot-path worker-state cache, the
-// liveness/alive keys, and (Day 3) the job queue. Nothing outside this
+// liveness/alive keys, and the job queue. Nothing outside this
 // package should call the go-redis client directly, for the same reason
 // internal/store/postgres owns all SQL -- one place to keep the key
 // naming/TTL contracts honest.

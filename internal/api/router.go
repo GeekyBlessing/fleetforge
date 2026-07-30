@@ -14,8 +14,8 @@ import (
 )
 
 // NewRouter wires the REST surface: worker listing/drain/resume, job
-// submission/listing/get, health checks, and (Day 6) GET /metrics for
-// Prometheus scraping (deploy/prometheus.yml), following
+// submission/listing/get, health checks, and GET /metrics for Prometheus
+// scraping (deploy/prometheus.yml), following
 // docs/02-openapi.yaml's paths one at a time rather than stubbing all of
 // them up front.
 func NewRouter(

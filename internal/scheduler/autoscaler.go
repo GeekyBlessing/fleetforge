@@ -14,12 +14,12 @@ import (
 // ScaleAction is what the autoscaler decided to do on a given tick, per
 // docs/09-design-rationale.md 9.2.
 //
-// There is no cloud-provider integration in this 7-day scope -- 9.7's open
+// There is no cloud-provider integration in the current scope -- 9.7's open
 // question #2 (which provider to target) was never answered with a
 // specific concrete target, so per that same doc's own fallback framing,
 // scale-UP is a logged recommendation only (nothing spins up real
 // capacity). Scale-DOWN, on the other hand, IS implemented for real, as far
-// as it safely can be: it drains an idle worker via the Day 5 mechanism,
+// as it safely can be: it drains an idle worker via the drain mechanism,
 // exactly matching 9.2 point 3 ("scale-down never touches BUSY/ASSIGNED
 // workers... drained first, terminated only once OFFLINE"). Actually
 // terminating a drained-and-now-OFFLINE worker's underlying instance is
@@ -73,9 +73,8 @@ func DefaultAutoscalerConfig() AutoscalerConfig {
 // struct's own in-memory sample history) -- three of the doc's four
 // signals. The fourth, CPU utilization from heartbeat resource_usage, is a
 // deliberate, documented gap: doc 5.2's HeartbeatRequest never grew a
-// resource_usage field in this 7-day scope, so there is no data source for
-// it yet. Adding it later is a proto field + one more signal in tick()
-// below, not a redesign.
+// resource_usage field, so there is no data source for it yet. Adding it
+// later is a proto field + one more signal in tick() below, not a redesign.
 type Autoscaler struct {
 	workers *postgres.WorkerStore
 	jobs    *postgres.JobStore

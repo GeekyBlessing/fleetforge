@@ -1,4 +1,5 @@
-# Day 6 scrape config. The scheduler runs on the HOST during local dev
+# Scrape config for the scheduler's /metrics endpoint. The scheduler runs
+# on the HOST during local dev
 # (`go run ./cmd/scheduler`, not inside this compose file -- see
 # docs/07-repository-structure.md's note that a Dockerfile.scheduler is a
 # later, deployment-time concern, not needed to develop against), so
