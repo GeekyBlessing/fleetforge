@@ -1,0 +1,550 @@
+openapi: 3.0.3
+info:
+  title: FleetForge Scheduler API
+  description: >
+    REST control-plane API for the FleetForge distributed build scheduler.
+    Worker registration and heartbeats are primarily transported over the
+    gRPC bidirectional stream described in doc 1 (lower overhead at 10k-worker
+    scale); the REST equivalents below exist for (a) workers/environments that
+    cannot use gRPC, (b) tooling, dashboards, and CLIs, and (c) parity/testing.
+    Both transports write to the same underlying state machine and are
+    mutually consistent.
+  version: "1.0.0"
+  contact:
+    name: FleetForge Platform Team
+servers:
+  - url: https://scheduler.internal.launchverse.dev/v1
+    description: Production
+  - url: http://localhost:8080/v1
+    description: Local (docker-compose)
+
+tags:
+  - name: workers
+  - name: jobs
+  - name: system
+
+security:
+  - bearerAuth: []
+  - mtls: []
+
+paths:
+  /workers/register:
+    post:
+      tags: [workers]
+      summary: Register a new build worker
+      description: >
+        Called once by a worker agent on startup. Requires a valid bootstrap
+        token (JWT) scoped to worker registration, or a client mTLS
+        certificate issued by the FleetForge CA. Idempotent on `hostname` +
+        `instance_id` within a 60s window to survive retry-on-timeout without
+        creating duplicate worker rows.
+      operationId: registerWorker
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkerRegistrationRequest'
+      responses:
+        '201':
+          description: Worker registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkerRegistrationResponse'
+        '400':
+          description: Malformed registration payload
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: Missing or invalid bootstrap token / client cert
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '409':
+          description: A worker with this hostname+instance_id is already REGISTERING/READY/BUSY (returns existing worker_id instead of creating a duplicate)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkerRegistrationResponse'
+        '429':
+          description: Registration rate limit exceeded for this token/source (see doc 4, Redis rate limiter)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /workers/{workerId}/heartbeat:
+    post:
+      tags: [workers]
+      summary: Report worker liveness and current status
+      description: >
+        REST fallback for the gRPC heartbeat stream. Expected every 5s.
+        Server treats this as a full state snapshot, not a delta.
+      operationId: sendHeartbeat
+      parameters:
+        - $ref: '#/components/parameters/WorkerId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HeartbeatRequest'
+      responses:
+        '200':
+          description: Heartbeat accepted; may include a pending assignment or drain signal
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HeartbeatResponse'
+        '404':
+          description: Unknown worker_id (worker was reaped as DEAD and must re-register)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '409':
+          description: Stale epoch — a newer registration exists for this worker identity; caller must re-register
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /workers/{workerId}/drain:
+    post:
+      tags: [workers]
+      summary: Begin draining a worker
+      description: >
+        Transitions worker to DRAINING. No new jobs will be assigned. Worker
+        finishes its current job (if any) and is then automatically
+        transitioned to OFFLINE by the scheduler. Returns immediately;
+        draining is asynchronous.
+      operationId: drainWorker
+      parameters:
+        - $ref: '#/components/parameters/WorkerId'
+      responses:
+        '202':
+          description: Drain initiated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Worker' }
+        '404':
+          description: Worker not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '409':
+          description: Worker already OFFLINE or DEAD
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /workers/{workerId}/resume:
+    post:
+      tags: [workers]
+      summary: Resume a drained or offline worker back to READY
+      operationId: resumeWorker
+      parameters:
+        - $ref: '#/components/parameters/WorkerId'
+      responses:
+        '200':
+          description: Worker resumed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Worker' }
+        '404':
+          description: Worker not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '409':
+          description: Worker is DEAD; cannot resume, must re-register
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /workers:
+    get:
+      tags: [workers]
+      summary: List workers
+      operationId: listWorkers
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/WorkerStatus'
+        - name: label
+          in: query
+          description: "Filter by label, format key=value. Repeatable."
+          schema: { type: string }
+          example: "arch=arm64"
+        - name: cursor
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 100, maximum: 1000 }
+      responses:
+        '200':
+          description: Paginated worker list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkerList'
+
+  /workers/{workerId}:
+    get:
+      tags: [workers]
+      summary: Get a single worker
+      operationId: getWorker
+      parameters:
+        - $ref: '#/components/parameters/WorkerId'
+      responses:
+        '200':
+          description: Worker detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Worker' }
+        '404':
+          description: Worker not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /jobs:
+    post:
+      tags: [jobs]
+      summary: Submit a build job
+      operationId: submitJob
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobSubmissionRequest'
+      responses:
+        '202':
+          description: Job accepted and queued
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Job' }
+        '400':
+          description: Invalid job spec
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '409':
+          description: "Duplicate idempotency_key — returns the original job instead of creating a new one"
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Job' }
+    get:
+      tags: [jobs]
+      summary: List jobs
+      operationId: listJobs
+      parameters:
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/JobStatus' }
+        - name: repository
+          in: query
+          schema: { type: string }
+        - name: worker_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: cursor
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 100, maximum: 1000 }
+      responses:
+        '200':
+          description: Paginated job list
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JobList' }
+
+  /jobs/{jobId}:
+    get:
+      tags: [jobs]
+      summary: Get a single job
+      operationId: getJob
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '200':
+          description: Job detail (includes retry history)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Job' }
+        '404':
+          description: Job not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+    delete:
+      tags: [jobs]
+      summary: Cancel a job
+      description: >
+        If QUEUED, removed from the queue immediately. If ASSIGNED/RUNNING,
+        a cancellation signal is sent to the worker over the gRPC stream;
+        the job transitions to CANCELLED once the worker acknowledges (or
+        after a force-cancel timeout, at which point the worker is presumed
+        to have killed the process and the job is marked CANCELLED anyway).
+      operationId: cancelJob
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '202':
+          description: Cancellation accepted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Job' }
+        '404':
+          description: Job not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '409':
+          description: Job already in a terminal state (SUCCESS/FAILED/CANCELLED)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /metrics:
+    get:
+      tags: [system]
+      summary: Prometheus metrics endpoint
+      operationId: getMetrics
+      security: []
+      responses:
+        '200':
+          description: Prometheus text exposition format
+          content:
+            text/plain:
+              schema: { type: string }
+
+  /healthz:
+    get:
+      tags: [system]
+      summary: Liveness probe
+      operationId: healthz
+      security: []
+      responses:
+        '200': { description: Process is up }
+
+  /readyz:
+    get:
+      tags: [system]
+      summary: Readiness probe (Postgres + Redis reachable, this replica knows leader status)
+      operationId: readyz
+      security: []
+      responses:
+        '200':
+          description: Ready to serve traffic
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  postgres: { type: boolean }
+                  redis: { type: boolean }
+                  is_leader: { type: boolean }
+        '503':
+          description: Not ready (a dependency is unreachable)
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Short-lived JWT for human/CI clients (job submission, admin actions)
+    mtls:
+      type: mutualTLS
+      description: Client certificate auth for worker agents (registration, heartbeat)
+
+  parameters:
+    WorkerId:
+      name: workerId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    JobId:
+      name: jobId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  schemas:
+    WorkerStatus:
+      type: string
+      enum: [REGISTERING, READY, BUSY, DRAINING, OFFLINE, DEAD]
+
+    JobStatus:
+      type: string
+      enum: [QUEUED, ASSIGNED, RUNNING, SUCCESS, FAILED, RETRYING, CANCELLED]
+
+    WorkerRegistrationRequest:
+      type: object
+      required: [hostname, instance_id, os, cpu_cores, memory_mb, version]
+      properties:
+        hostname: { type: string, example: "build-node-a1b2" }
+        instance_id:
+          type: string
+          description: Stable identifier surviving process restarts (e.g. cloud instance ID or machine UUID); used for idempotent re-registration.
+        os: { type: string, example: "linux/amd64" }
+        cpu_cores: { type: integer, example: 16 }
+        memory_mb: { type: integer, example: 65536 }
+        labels:
+          type: object
+          additionalProperties: { type: string }
+          example: { "region": "us-east-1", "arch": "amd64" }
+        capabilities:
+          type: array
+          items: { type: string }
+          example: ["docker", "gpu", "large-disk"]
+        version: { type: string, example: "1.4.2" }
+        capacity_slots:
+          type: integer
+          default: 1
+          description: Number of concurrent jobs this worker can run.
+
+    WorkerRegistrationResponse:
+      type: object
+      properties:
+        worker_id: { type: string, format: uuid }
+        epoch:
+          type: integer
+          format: int64
+          description: Fencing token for this registration. Included in all subsequent heartbeats and job assignments to detect zombie workers (see doc 6).
+        heartbeat_interval_seconds: { type: integer, example: 5 }
+        heartbeat_timeout_seconds: { type: integer, example: 20 }
+
+    HeartbeatRequest:
+      type: object
+      required: [epoch, status]
+      properties:
+        epoch: { type: integer, format: int64 }
+        status: { $ref: '#/components/schemas/WorkerStatus' }
+        current_job_id: { type: string, format: uuid, nullable: true }
+        resource_usage:
+          type: object
+          properties:
+            cpu_percent: { type: number }
+            memory_percent: { type: number }
+        available_capacity: { type: integer }
+
+    HeartbeatResponse:
+      type: object
+      properties:
+        acknowledged: { type: boolean }
+        assignment:
+          nullable: true
+          allOf: [{ $ref: '#/components/schemas/JobAssignment' }]
+        drain_requested: { type: boolean }
+
+    JobAssignment:
+      type: object
+      properties:
+        job_id: { type: string, format: uuid }
+        assignment_epoch: { type: integer, format: int64 }
+        repository: { type: string }
+        branch: { type: string }
+        commit_sha: { type: string }
+
+    Worker:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        hostname: { type: string }
+        os: { type: string }
+        cpu_cores: { type: integer }
+        memory_mb: { type: integer }
+        labels: { type: object, additionalProperties: { type: string } }
+        capabilities: { type: array, items: { type: string } }
+        status: { $ref: '#/components/schemas/WorkerStatus' }
+        current_job_id: { type: string, format: uuid, nullable: true }
+        last_heartbeat: { type: string, format: date-time }
+        version: { type: string }
+        available_capacity: { type: integer }
+        epoch: { type: integer, format: int64 }
+        registered_at: { type: string, format: date-time }
+
+    WorkerList:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Worker' } }
+        next_cursor: { type: string, nullable: true }
+        total_count: { type: integer }
+
+    JobSubmissionRequest:
+      type: object
+      required: [repository, branch, commit_sha]
+      properties:
+        priority:
+          type: integer
+          minimum: 0
+          maximum: 9
+          default: 5
+          description: "0 = highest priority, 9 = lowest."
+        repository: { type: string, example: "launchverse/api" }
+        branch: { type: string, example: "main" }
+        commit_sha: { type: string, example: "a1b2c3d4e5f6" }
+        labels: { type: object, additionalProperties: { type: string } }
+        required_capabilities:
+          type: array
+          items: { type: string }
+          example: ["docker", "gpu"]
+        max_retries: { type: integer, default: 3 }
+        idempotency_key:
+          type: string
+          description: Client-supplied key to safely retry job submission without creating duplicates.
+
+    Job:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        priority: { type: integer }
+        repository: { type: string }
+        branch: { type: string }
+        commit_sha: { type: string }
+        labels: { type: object, additionalProperties: { type: string } }
+        required_capabilities: { type: array, items: { type: string } }
+        retries: { type: integer }
+        max_retries: { type: integer }
+        status: { $ref: '#/components/schemas/JobStatus' }
+        worker_id: { type: string, format: uuid, nullable: true }
+        log_ref:
+          type: string
+          nullable: true
+          description: Pointer to externally-stored logs (object storage URI).
+        created_at: { type: string, format: date-time }
+        started_at: { type: string, format: date-time, nullable: true }
+        finished_at: { type: string, format: date-time, nullable: true }
+        retry_history:
+          type: array
+          items: { $ref: '#/components/schemas/RetryAttempt' }
+
+    RetryAttempt:
+      type: object
+      properties:
+        attempt_number: { type: integer }
+        status: { $ref: '#/components/schemas/JobStatus' }
+        worker_id: { type: string, format: uuid, nullable: true }
+        error_message: { type: string, nullable: true }
+        started_at: { type: string, format: date-time }
+        finished_at: { type: string, format: date-time, nullable: true }
+
+    JobList:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Job' } }
+        next_cursor: { type: string, nullable: true }
+        total_count: { type: integer }
+
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+        message: { type: string }
+        request_id: { type: string }

@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package fleetforge.v1;
+
+option go_package = "github.com/launchverse/fleetforge/proto/fleetforge/v1;fleetforgev1";
+
+// Mirrors the `worker_status` Postgres enum (docs/03-database-schema.md) --
+// keep these two definitions in lockstep by hand for now; a codegen check
+// that diffs them is a reasonable Day 7 addition, not a Day 1 one.
+enum WorkerStatus {
+  WORKER_STATUS_UNSPECIFIED = 0; // never used on the wire; catches a missing field vs. an explicit state
+  WORKER_STATUS_REGISTERING = 1;
+  WORKER_STATUS_READY       = 2;
+  WORKER_STATUS_BUSY        = 3;
+  WORKER_STATUS_DRAINING    = 4;
+  WORKER_STATUS_OFFLINE     = 5;
+  WORKER_STATUS_DEAD        = 6;
+}
+
+enum JobStatus {
+  JOB_STATUS_UNSPECIFIED = 0;
+  JOB_STATUS_QUEUED     = 1;
+  JOB_STATUS_ASSIGNED   = 2;
+  JOB_STATUS_RUNNING    = 3;
+  JOB_STATUS_SUCCESS    = 4;
+  JOB_STATUS_FAILED     = 5;
+  JOB_STATUS_RETRYING   = 6;
+  JOB_STATUS_CANCELLED  = 7;
+}
+
+message ResourceUsage {
+  double cpu_percent = 1;
+  double memory_percent = 2;
+}
+
+// What the scheduler pushes to a worker once a job is assigned to it.
+// (doc 5.4 / doc 2 JobAssignment schema)
+message JobAssignment {
+  string job_id = 1;
+  int64 assignment_epoch = 2;
+  string repository = 3;
+  string branch = 4;
+  string commit_sha = 5;
+}

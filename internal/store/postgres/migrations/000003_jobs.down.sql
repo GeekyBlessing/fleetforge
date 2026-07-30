@@ -1,0 +1,2 @@
+ALTER TABLE workers DROP CONSTRAINT IF EXISTS fk_workers_current_job;
+DROP TABLE IF EXISTS jobs CASCADE;

@@ -1,0 +1,80 @@
+syntax = "proto3";
+
+package fleetforge.v1;
+
+import "proto/fleetforge/v1/worker.proto";
+
+option go_package = "github.com/launchverse/fleetforge/proto/fleetforge/v1;fleetforgev1";
+
+// FleetScheduler is the worker-facing control plane (doc 1.2). Every RPC here
+// is called by a worker agent talking to the gRPC control server -- nothing
+// in this service is meant to be called by human/CI clients, that's the REST
+// API (docs/02-openapi.yaml) instead.
+service FleetScheduler {
+  // Called once on worker-agent startup (and again on any restart). Idempotent
+  // on instance_id -- see docs/05-sequence-diagrams.md 5.1.
+  rpc RegisterWorker(RegisterWorkerRequest) returns (RegisterWorkerResponse);
+
+  // Long-lived bidirectional stream, one per worker, for the lifetime of the
+  // agent process. Worker -> scheduler: liveness + status every 5s.
+  // Scheduler -> worker: job assignments, drain signals, forced re-register
+  // (on epoch mismatch). See docs/05-sequence-diagrams.md 5.2.
+  //
+  // Implemented Day 2 -- defined now so the contract is fixed before either
+  // side is built against it.
+  rpc Heartbeat(stream HeartbeatRequest) returns (stream HeartbeatResponse);
+
+  // Worker reports a finished (or cancelled) job. Idempotent / epoch-guarded
+  // per docs/05-sequence-diagrams.md 5.4 and docs/06-failure-scenarios.md #10.
+  //
+  // Implemented Day 4.
+  rpc ReportJobResult(ReportJobResultRequest) returns (ReportJobResultResponse);
+}
+
+message RegisterWorkerRequest {
+  string hostname = 1;
+  string instance_id = 2;
+  string os = 3;
+  int32 cpu_cores = 4;
+  int32 memory_mb = 5;
+  map<string, string> labels = 6;
+  repeated string capabilities = 7;
+  string version = 8;
+  int32 capacity_slots = 9;
+}
+
+message RegisterWorkerResponse {
+  string worker_id = 1;
+  int64 epoch = 2;
+  int32 heartbeat_interval_seconds = 3;
+  int32 heartbeat_timeout_seconds = 4;
+}
+
+message HeartbeatRequest {
+  string worker_id = 1;
+  int64 epoch = 2;
+  WorkerStatus status = 3;
+  optional string current_job_id = 4;
+  ResourceUsage resource_usage = 5;
+  int32 available_capacity = 6;
+}
+
+message HeartbeatResponse {
+  bool acknowledged = 1;
+  optional JobAssignment assignment = 2;
+  bool drain_requested = 3;
+}
+
+message ReportJobResultRequest {
+  string job_id = 1;
+  int64 assignment_epoch = 2;
+  JobStatus status = 3;
+  int32 exit_code = 4;
+  string log_ref = 5;
+  string error_message = 6;
+}
+
+message ReportJobResultResponse {
+  bool acknowledged = 1;
+  bool discarded_stale_epoch = 2; // true when doc 6 scenario #10 / #6 fires: this report was superseded
+}
