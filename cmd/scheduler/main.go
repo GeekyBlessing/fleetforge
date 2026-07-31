@@ -18,8 +18,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 
 	"github.com/launchverse/fleetforge/internal/api"
+	"github.com/launchverse/fleetforge/internal/auth"
 	"github.com/launchverse/fleetforge/internal/config"
 	"github.com/launchverse/fleetforge/internal/grpcserver"
 	"github.com/launchverse/fleetforge/internal/metrics"
@@ -63,7 +65,24 @@ func main() {
 	}
 
 	// --- gRPC control plane (workers) ---
-	grpcSrv := grpc.NewServer()
+	//
+	// mTLS (docs/09-design-rationale.md 9.4): only enabled when all three
+	// cert/key/CA paths are configured, so every existing local-dev and CI
+	// setup (none of which set these) is completely unaffected -- see
+	// scripts/gen-certs.sh to generate a cert pair and turn this on.
+	var grpcOpts []grpc.ServerOption
+	if cfg.TLSCertFile != "" && cfg.TLSKeyFile != "" && cfg.TLSCAFile != "" {
+		tlsConfig, tlsErr := auth.ServerTLSConfig(cfg.TLSCertFile, cfg.TLSKeyFile, cfg.TLSCAFile)
+		if tlsErr != nil {
+			log.Fatal().Err(tlsErr).Msg("failed to load mTLS server config")
+		}
+		grpcOpts = append(grpcOpts, grpc.Creds(credentials.NewTLS(tlsConfig)))
+		log.Info().Msg("grpc control plane: mTLS enabled, client certificates required")
+	} else {
+		log.Warn().Msg("grpc control plane: mTLS NOT configured, running with insecure credentials (set FLEETFORGE_TLS_CERT_FILE/KEY_FILE/CA_FILE)")
+	}
+
+	grpcSrv := grpc.NewServer(grpcOpts...)
 	fleetforgev1.RegisterFleetSchedulerServer(grpcSrv, grpcserver.NewServer(
 		workerStore,
 		jobStore,
@@ -158,9 +177,13 @@ func main() {
 		return pgOK, redisOK, leaderElector.IsLeader()
 	}
 
+	if cfg.JWTSecret == "" {
+		log.Warn().Msg("rest api: FLEETFORGE_JWT_SECRET not set, write endpoints (POST /jobs, drain/resume) are unauthenticated")
+	}
+
 	httpSrv := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           api.NewRouter(workerStore, jobStore, jobQueue, workerCache, log, isReady),
+		Handler:           api.NewRouter(workerStore, jobStore, jobQueue, workerCache, log, isReady, []byte(cfg.JWTSecret)),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

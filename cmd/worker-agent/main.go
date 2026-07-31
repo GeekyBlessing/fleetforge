@@ -24,10 +24,12 @@ import (
 
 	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 
 	agentruntime "github.com/launchverse/fleetforge/worker-agent-runtime"
 
+	"github.com/launchverse/fleetforge/internal/auth"
 	"github.com/launchverse/fleetforge/internal/config"
 	fleetforgev1 "github.com/launchverse/fleetforge/proto/fleetforge/v1"
 )
@@ -141,10 +143,22 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	// insecure.NewCredentials() is correct for local dev only. mTLS
-	// replaces this per docs/09-design-rationale.md 9.4 -- swapping it is a
-	// change to this one Dial call, not to anything else in the agent.
-	conn, err := grpc.NewClient(cfg.SchedulerGRPCAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	// insecure.NewCredentials() is the fallback for local dev only. mTLS
+	// (docs/09-design-rationale.md 9.4) takes over as soon as all three
+	// cert/key/CA paths are configured -- see scripts/gen-certs.sh.
+	transportCreds := insecure.NewCredentials()
+	if cfg.TLSCertFile != "" && cfg.TLSKeyFile != "" && cfg.TLSCAFile != "" {
+		tlsConfig, tlsErr := auth.ClientTLSConfig(cfg.TLSCertFile, cfg.TLSKeyFile, cfg.TLSCAFile)
+		if tlsErr != nil {
+			log.Fatal().Err(tlsErr).Msg("failed to load mTLS client config")
+		}
+		transportCreds = credentials.NewTLS(tlsConfig)
+		log.Info().Msg("dialing scheduler with mTLS")
+	} else {
+		log.Warn().Msg("FLEETFORGE_TLS_CERT_FILE/KEY_FILE/CA_FILE not set, dialing scheduler with insecure credentials")
+	}
+
+	conn, err := grpc.NewClient(cfg.SchedulerGRPCAddr, grpc.WithTransportCredentials(transportCreds))
 	if err != nil {
 		//nolint:gocritic // process is exiting immediately; the pending defer stop() above has nothing left to clean up
 		log.Fatal().Err(err).Str("addr", cfg.SchedulerGRPCAddr).Msg("failed to dial scheduler")

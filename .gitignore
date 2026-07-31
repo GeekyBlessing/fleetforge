@@ -2,3 +2,4 @@ bin/
 *.log
 coverage.out
 .env
+certs/

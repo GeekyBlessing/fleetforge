@@ -8,6 +8,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog"
 
+	"github.com/launchverse/fleetforge/internal/auth"
 	"github.com/launchverse/fleetforge/internal/queue"
 	"github.com/launchverse/fleetforge/internal/store/postgres"
 	ffredis "github.com/launchverse/fleetforge/internal/store/redis"
@@ -18,6 +19,13 @@ import (
 // scraping (deploy/prometheus.yml), following
 // docs/02-openapi.yaml's paths one at a time rather than stubbing all of
 // them up front.
+//
+// jwtSecret gates the write endpoints (docs/09-design-rationale.md 9.4):
+// empty means auth is off (local dev / CI, unchanged from before this was
+// added), non-empty means POST /jobs requires the "jobs:submit" scope and
+// the drain/resume endpoints require "workers:drain" on a valid, unexpired
+// bearer token (internal/auth). Read-only GETs stay open either way -- low
+// risk, and keeps ad-hoc curl/fleetforgectl inspection unauthenticated.
 func NewRouter(
 	workerStore *postgres.WorkerStore,
 	jobStore *postgres.JobStore,
@@ -25,6 +33,7 @@ func NewRouter(
 	workerCache *ffredis.WorkerCache,
 	log zerolog.Logger,
 	isReady func() (postgres bool, redis bool, isLeader bool),
+	jwtSecret []byte,
 ) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
@@ -34,12 +43,21 @@ func NewRouter(
 	workers := NewWorkersHandler(workerStore, workerCache, log)
 	jobs := NewJobsHandler(jobStore, jobQueue, log)
 
+	requireScope := func(scope string) func(http.Handler) http.Handler {
+		return func(next http.Handler) http.Handler { return next }
+	}
+	if len(jwtSecret) > 0 {
+		requireScope = func(scope string) func(http.Handler) http.Handler {
+			return RequireScope(jwtSecret, scope)
+		}
+	}
+
 	r.Route("/v1", func(r chi.Router) {
 		r.Get("/workers", workers.ListWorkers)
-		r.Post("/workers/{workerId}/drain", workers.DrainWorker)
-		r.Post("/workers/{workerId}/resume", workers.ResumeWorker)
+		r.With(requireScope(auth.ScopeWorkersDrain)).Post("/workers/{workerId}/drain", workers.DrainWorker)
+		r.With(requireScope(auth.ScopeWorkersDrain)).Post("/workers/{workerId}/resume", workers.ResumeWorker)
 
-		r.Post("/jobs", jobs.SubmitJob)
+		r.With(requireScope(auth.ScopeJobsSubmit)).Post("/jobs", jobs.SubmitJob)
 		r.Get("/jobs", jobs.ListJobs)
 		r.Get("/jobs/{jobId}", jobs.GetJob)
 	})

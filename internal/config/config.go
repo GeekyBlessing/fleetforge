@@ -20,6 +20,22 @@ type SchedulerConfig struct {
 
 	HeartbeatIntervalSeconds int
 	HeartbeatTimeoutSeconds  int
+
+	// JWTSecret gates internal/api's write endpoints (POST /jobs,
+	// drain/resume) via internal/auth -- see docs/09-design-rationale.md
+	// 9.4. Empty means auth is off, matching every environment (local dev,
+	// CI) that existed before this was added; set FLEETFORGE_JWT_SECRET to
+	// turn it on.
+	JWTSecret string
+
+	// mTLS for the worker<->scheduler gRPC control plane
+	// (docs/09-design-rationale.md 9.4). All three unset means insecure
+	// credentials, same as before this was added -- see
+	// scripts/gen-certs.sh to generate a local CA + server/client cert pair
+	// for turning this on.
+	TLSCertFile string
+	TLSKeyFile  string
+	TLSCAFile   string
 }
 
 // LoadSchedulerConfig reads configuration from the environment. Only
@@ -46,6 +62,12 @@ func LoadSchedulerConfig() (SchedulerConfig, error) {
 	if err != nil {
 		return cfg, err
 	}
+
+	cfg.JWTSecret = os.Getenv("FLEETFORGE_JWT_SECRET")
+	cfg.TLSCertFile = os.Getenv("FLEETFORGE_TLS_CERT_FILE")
+	cfg.TLSKeyFile = os.Getenv("FLEETFORGE_TLS_KEY_FILE")
+	cfg.TLSCAFile = os.Getenv("FLEETFORGE_TLS_CA_FILE")
+
 	return cfg, nil
 }
 
@@ -62,6 +84,13 @@ type WorkerAgentConfig struct {
 	Labels            map[string]string
 	Capabilities      []string
 	SimulatedFailureRate float64 // 0.0-1.0 -- see worker-agent-runtime.SimulatedExecutor
+
+	// mTLS client identity for dialing the scheduler -- mirrors
+	// SchedulerConfig's TLS fields; see scripts/gen-certs.sh. All three
+	// unset means insecure credentials, unchanged from before this existed.
+	TLSCertFile string
+	TLSKeyFile  string
+	TLSCAFile   string
 }
 
 func LoadWorkerAgentConfig() (WorkerAgentConfig, error) {
@@ -114,6 +143,10 @@ func LoadWorkerAgentConfig() (WorkerAgentConfig, error) {
 		}
 		cfg.SimulatedFailureRate = rate
 	}
+
+	cfg.TLSCertFile = os.Getenv("FLEETFORGE_TLS_CERT_FILE")
+	cfg.TLSKeyFile = os.Getenv("FLEETFORGE_TLS_KEY_FILE")
+	cfg.TLSCAFile = os.Getenv("FLEETFORGE_TLS_CA_FILE")
 
 	return cfg, nil
 }
