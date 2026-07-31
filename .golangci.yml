@@ -1,3 +1,5 @@
+version: "2"
+
 run:
   timeout: 5m
   tests: true
@@ -6,22 +8,19 @@ linters:
   enable:
     - errcheck
     - govet
-    - staticcheck
+    - staticcheck   # v2's staticcheck linter is a superset that now also covers what gosimple used to check separately
     - unused
-    - gosimple
     - ineffassign
     - bodyclose      # catches unclosed HTTP response bodies -- easy leak in the REST client
     - sqlclosecheck   # catches unclosed *sql.Rows / statements
     - noctx           # flags http/db calls made without context, which we rely on for cancellation everywhere
     - gocritic
-
-linters-settings:
-  govet:
-    enable:
-      - shadow   # shadowed err is a classic source of "we checked the wrong error" bugs in this codebase's nested tx blocks
-
-issues:
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - errcheck
+  settings:
+    govet:
+      enable:
+        - shadow   # shadowed err is a classic source of "we checked the wrong error" bugs in this codebase's nested tx blocks
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
