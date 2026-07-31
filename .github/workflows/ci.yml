@@ -62,4 +62,4 @@ jobs:
 
       - name: Run integration tests
         run: |
-          go test ./test/integration/... -count=1 -v
+          go test -tags integration ./test/integration/... -count=1 -v
