@@ -76,12 +76,12 @@ func (s *JobStore) Create(ctx context.Context, p CreateJobParams) (job Job, wasE
 	}
 
 	if p.IdempotencyKey != "" {
-		existing, err := s.getByIdempotencyKey(ctx, p.IdempotencyKey)
-		if err == nil {
+		existing, lookupErr := s.getByIdempotencyKey(ctx, p.IdempotencyKey)
+		if lookupErr == nil {
 			return existing, true, nil
 		}
-		if !errors.Is(err, ErrJobNotFound) {
-			return Job{}, false, err
+		if !errors.Is(lookupErr, ErrJobNotFound) {
+			return Job{}, false, lookupErr
 		}
 	}
 
@@ -339,31 +339,31 @@ func (s *JobStore) RetryOrFail(ctx context.Context, jobID string, jobCreatedAt t
 		}
 
 		var nextAttempt int
-		if err := tx.QueryRow(ctx, `
+		if countErr := tx.QueryRow(ctx, `
 			SELECT COUNT(*) + 1 FROM job_retry_history WHERE job_id = $1
-		`, jobID).Scan(&nextAttempt); err != nil {
-			return fmt.Errorf("count retry history: %w", err)
+		`, jobID).Scan(&nextAttempt); countErr != nil {
+			return fmt.Errorf("count retry history: %w", countErr)
 		}
 
 		nextRetries := retries + 1
 		if nextRetries <= maxRetries {
 			retryAt := time.Now().Add(retryBackoff(nextRetries))
-			if _, err := tx.Exec(ctx, `
+			if _, updateErr := tx.Exec(ctx, `
 				UPDATE jobs
 				SET status = 'RETRYING', retries = $1, retry_at = $2,
 				    worker_id = NULL, assignment_epoch = NULL, started_at = NULL
 				WHERE id = $3 AND created_at = $4
-			`, nextRetries, retryAt, jobID, jobCreatedAt); err != nil {
-				return fmt.Errorf("mark job retrying: %w", err)
+			`, nextRetries, retryAt, jobID, jobCreatedAt); updateErr != nil {
+				return fmt.Errorf("mark job retrying: %w", updateErr)
 			}
 			newStatus = "RETRYING"
 		} else {
-			if _, err := tx.Exec(ctx, `
+			if _, failErr := tx.Exec(ctx, `
 				UPDATE jobs
 				SET status = 'FAILED', finished_at = now(), log_ref = $1
 				WHERE id = $2 AND created_at = $3
-			`, logRefArg, jobID, jobCreatedAt); err != nil {
-				return fmt.Errorf("mark job failed (retries exhausted): %w", err)
+			`, logRefArg, jobID, jobCreatedAt); failErr != nil {
+				return fmt.Errorf("mark job failed (retries exhausted): %w", failErr)
 			}
 			newStatus = "FAILED"
 		}

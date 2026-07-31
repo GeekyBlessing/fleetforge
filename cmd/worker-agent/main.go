@@ -146,9 +146,10 @@ func main() {
 	// change to this one Dial call, not to anything else in the agent.
 	conn, err := grpc.NewClient(cfg.SchedulerGRPCAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
+		//nolint:gocritic // process is exiting immediately; the pending defer stop() above has nothing left to clean up
 		log.Fatal().Err(err).Str("addr", cfg.SchedulerGRPCAddr).Msg("failed to dial scheduler")
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	client := fleetforgev1.NewFleetSchedulerClient(conn)
 
@@ -342,11 +343,12 @@ func runAssignment(ctx context.Context, d heartbeatDeps, a *fleetforgev1.JobAssi
 		LogRef:          result.LogRef,
 		ErrorMessage:    result.ErrorMessage,
 	})
-	if err != nil {
+	switch {
+	case err != nil:
 		d.log.Error().Err(err).Str("job_id", a.GetJobId()).Msg("failed to report job result")
-	} else if reportResp.GetDiscardedStaleEpoch() {
+	case reportResp.GetDiscardedStaleEpoch():
 		d.log.Warn().Str("job_id", a.GetJobId()).Msg("scheduler discarded our result as stale (job was reassigned)")
-	} else {
+	default:
 		d.log.Info().Str("job_id", a.GetJobId()).Bool("success", result.Success).Msg("job result reported")
 	}
 

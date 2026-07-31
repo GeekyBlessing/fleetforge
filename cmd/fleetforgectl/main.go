@@ -10,6 +10,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -81,11 +82,17 @@ func newWorkersCmd(apiAddr *string) *cobra.Command {
 func postWorkerAction(apiAddr, workerID, action string) error {
 	url := apiAddr + "/v1/workers/" + workerID + "/" + action
 
-	resp, err := http.Post(url, "application/json", bytes.NewReader(nil)) //nolint:gosec // operator-supplied base URL/flag, not user input from the network
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, bytes.NewReader(nil)) //nolint:gosec // operator-supplied base URL/flag, not user input from the network
+	if err != nil {
+		return fmt.Errorf("build request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -120,11 +127,16 @@ func listWorkers(apiAddr, statusFilter string) error {
 		url += "?status=" + statusFilter
 	}
 
-	resp, err := http.Get(url) //nolint:gosec // operator-supplied base URL/flag, not user input from the network
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil) //nolint:gosec // operator-supplied base URL/flag, not user input from the network
+	if err != nil {
+		return fmt.Errorf("build request: %w", err)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -140,10 +152,14 @@ func listWorkers(apiAddr, statusFilter string) error {
 	}
 
 	tw := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(tw, "ID\tHOSTNAME\tSTATUS\tCAPACITY\tEPOCH\tVERSION\tREGISTERED")
+	if _, err := fmt.Fprintln(tw, "ID\tHOSTNAME\tSTATUS\tCAPACITY\tEPOCH\tVERSION\tREGISTERED"); err != nil {
+		return fmt.Errorf("write header: %w", err)
+	}
 	for _, w := range out.Items {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%d\t%s\t%s\n",
-			w.ID, w.Hostname, w.Status, w.AvailableCapacity, w.Epoch, w.Version, w.RegisteredAt)
+		if _, err := fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%d\t%s\t%s\n",
+			w.ID, w.Hostname, w.Status, w.AvailableCapacity, w.Epoch, w.Version, w.RegisteredAt); err != nil {
+			return fmt.Errorf("write row: %w", err)
+		}
 	}
 	return tw.Flush()
 }

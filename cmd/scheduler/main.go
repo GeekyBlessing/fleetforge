@@ -42,6 +42,7 @@ func main() {
 
 	pool, err := postgres.NewPool(ctx, cfg.DatabaseURL)
 	if err != nil {
+		//nolint:gocritic // process is exiting immediately; the pending defer stop() above has nothing left to clean up
 		log.Fatal().Err(err).Msg("failed to connect to postgres")
 	}
 	defer pool.Close()
@@ -53,12 +54,12 @@ func main() {
 	if err != nil {
 		log.Fatal().Err(err).Str("addr", cfg.RedisAddr).Msg("failed to connect to redis")
 	}
-	defer redisClient.Close()
+	defer func() { _ = redisClient.Close() }()
 	workerCache := ffredis.NewWorkerCache(redisClient)
 
 	jobQueue := ffredis.NewStreamQueue(redisClient)
-	if err := jobQueue.EnsureConsumerGroups(ctx); err != nil {
-		log.Fatal().Err(err).Msg("failed to set up redis consumer groups")
+	if groupErr := jobQueue.EnsureConsumerGroups(ctx); groupErr != nil {
+		log.Fatal().Err(groupErr).Msg("failed to set up redis consumer groups")
 	}
 
 	// --- gRPC control plane (workers) ---
@@ -135,7 +136,8 @@ func main() {
 	)
 	go schedulingLoop.Run(ctx)
 
-	lis, err := net.Listen("tcp", cfg.GRPCAddr)
+	var lc net.ListenConfig
+	lis, err := lc.Listen(ctx, "tcp", cfg.GRPCAddr)
 	if err != nil {
 		log.Fatal().Err(err).Str("addr", cfg.GRPCAddr).Msg("failed to bind grpc listener")
 	}
