@@ -78,12 +78,12 @@ log "waiting for jobs to be picked up..."
 sleep 8
 
 echo ""
-echo "=== Workers ==="
-go run ./cmd/fleetforgectl workers list || true
-
-echo ""
 echo "=== Jobs ==="
 curl -sf "$SCHEDULER_HTTP/v1/jobs" | (python3 -m json.tool 2>/dev/null || cat)
+
+echo ""
+echo "=== Workers ==="
+./bin/fleetforgectl workers list || true
 
 echo ""
 log "scheduler log:     $RUN_DIR/scheduler.log"

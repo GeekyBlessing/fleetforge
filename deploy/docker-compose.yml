@@ -1,5 +1,3 @@
-version: "3.9"
-
 # Local dev stack: postgres + redis for the core services, plus prometheus
 # and grafana (see deploy/prometheus.yml and deploy/grafana/) for the
 # metrics/dashboard story. The scheduler and worker-agent binaries themselves

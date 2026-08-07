@@ -63,6 +63,8 @@ flowchart TB
 
 **Redis**: the job queue (Streams with consumer groups) and a hot-path cache for worker state, avoiding a Postgres round-trip on every heartbeat.
 
+One eventual-consistency detail worth stating plainly, since you'll see it if you run `make demo` yourself: a worker's `status`/`available_capacity` in `GET /workers` can lag the `jobs` table by up to one heartbeat interval (5s by default). The worker's own heartbeat handler writes whatever status the worker last self-reported on every heartbeat, independent of what the assignment or completion transaction just did to that same row, so a worker's first heartbeat right after being assigned (or right after finishing a job, before it's picked up the next one) can briefly show stale `READY`/`BUSY`. The `jobs` table itself, which is what actually governs correctness (no double-booking, nothing lost), is never affected; only the worker's own display field lags, and it self-corrects on the next heartbeat. See the `FreeWorker` comment in `internal/store/postgres/workers.go` for the full reasoning.
+
 **Worker Agent**: registers once, heartbeats every 5 seconds, executes at most one job per capacity slot, reports results. The build execution itself is a `SimulatedExecutor` (`worker-agent-runtime/executor.go`) that spends a real, deterministic few seconds and fails at a configurable rate, exercising the full scheduling and retry pipeline honestly without shelling out to a real build tool. A real executor (`docker run`, log streaming) plugs into the same `Executor` interface without touching the scheduler.
 
 **Prometheus / Grafana**: Prometheus scrapes the scheduler's `/metrics` every 10 seconds; a provisioned Grafana dashboard visualizes queue depth, worker counts, assignment/completion rates, job duration percentiles, and autoscaler decisions.
@@ -117,7 +119,7 @@ export FLEETFORGE_INSTANCE_ID=dev-worker-1 FLEETFORGE_CPU_CORES=4 FLEETFORGE_MEM
 Then inspect and submit work:
 
 ```bash
-go run ./cmd/fleetforgectl workers list
+./bin/fleetforgectl workers list
 curl -X POST localhost:8080/v1/jobs -d '{"repository":"github.com/example/app","branch":"main","commit_sha":"'"$(uuidgen)"'","idempotency_key":"demo-1"}'
 ```
 
