@@ -3,3 +3,4 @@ bin/
 coverage.out
 .env
 certs/
+test/load/venv/
