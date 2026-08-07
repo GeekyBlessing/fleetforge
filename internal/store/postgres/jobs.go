@@ -368,11 +368,11 @@ func (s *JobStore) RetryOrFail(ctx context.Context, jobID string, jobCreatedAt t
 			newStatus = "FAILED"
 		}
 
-		if _, err := tx.Exec(ctx, `
+		if _, histErr := tx.Exec(ctx, `
 			INSERT INTO job_retry_history (job_id, job_created_at, attempt_number, status, worker_id, error_message, started_at, finished_at)
 			VALUES ($1, $2, $3, 'FAILED', $4, $5, now(), now())
-		`, jobID, jobCreatedAt, nextAttempt, workerID, errMsgArg); err != nil {
-			return fmt.Errorf("insert retry history: %w", err)
+		`, jobID, jobCreatedAt, nextAttempt, workerID, errMsgArg); histErr != nil {
+			return fmt.Errorf("insert retry history: %w", histErr)
 		}
 
 		ok = true

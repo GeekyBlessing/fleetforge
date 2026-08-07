@@ -150,6 +150,7 @@ func main() {
 	if cfg.TLSCertFile != "" && cfg.TLSKeyFile != "" && cfg.TLSCAFile != "" {
 		tlsConfig, tlsErr := auth.ClientTLSConfig(cfg.TLSCertFile, cfg.TLSKeyFile, cfg.TLSCAFile)
 		if tlsErr != nil {
+			//nolint:gocritic // process is exiting immediately; the pending defer stop() above has nothing left to clean up
 			log.Fatal().Err(tlsErr).Msg("failed to load mTLS client config")
 		}
 		transportCreds = credentials.NewTLS(tlsConfig)

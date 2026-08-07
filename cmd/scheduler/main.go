@@ -74,6 +74,7 @@ func main() {
 	if cfg.TLSCertFile != "" && cfg.TLSKeyFile != "" && cfg.TLSCAFile != "" {
 		tlsConfig, tlsErr := auth.ServerTLSConfig(cfg.TLSCertFile, cfg.TLSKeyFile, cfg.TLSCAFile)
 		if tlsErr != nil {
+			//nolint:gocritic // process is exiting immediately; the pending defer stop() above has nothing left to clean up
 			log.Fatal().Err(tlsErr).Msg("failed to load mTLS server config")
 		}
 		grpcOpts = append(grpcOpts, grpc.Creds(credentials.NewTLS(tlsConfig)))
