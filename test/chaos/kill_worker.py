@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Chaos test: docs/06-failure-scenarios.md scenario #3 -- a worker crashes
+"""Chaos test: docs/06-failure-scenarios.md scenario #3: a worker crashes
 (process dies, host dies, OOM-killed) while running a job.
 
 Spins up one real `bin/worker-agent` against an already-running scheduler,
 submits a job, waits for it to be assigned to that worker, then SIGKILLs
 the worker-agent process outright (no graceful shutdown, no final
-ReportJobResult -- a genuine crash, not a clean disconnect). Asserts:
+ReportJobResult: a genuine crash, not a clean disconnect). Asserts:
 
   1. The worker is marked DEAD within the heartbeat-timeout window
-     (default 20s + the 5s reaper sweep interval -- docs/05-sequence-diagrams.md 5.3).
+     (default 20s + the 5s reaper sweep interval, per docs/05-sequence-diagrams.md 5.3).
   2. Its in-flight job is atomically requeued rather than left stuck
      ASSIGNED/RUNNING forever (docs/06-failure-scenarios.md #3's "same
      transaction" guarantee).
@@ -16,7 +16,7 @@ ReportJobResult -- a genuine crash, not a clean disconnect). Asserts:
 Prerequisites:
     make build                              # produces bin/worker-agent
     A scheduler already running and reachable (this script only starts
-    the worker -- see test/chaos/kill_leader.py for spinning up
+    the worker; see test/chaos/kill_leader.py for spinning up
     schedulers themselves).
 
 Usage:

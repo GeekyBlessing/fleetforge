@@ -59,11 +59,11 @@ var ErrJobNotFound = errors.New("job not found")
 // idempotency_key could both pass the SELECT before either INSERTs), and
 // even outside that race, uq_jobs_idempotency_key is only unique within a
 // matching created_at (docs/03-database-schema.md 3.2 note) because jobs is
-// partitioned by created_at. Both gaps have the same fix -- a small
+// partitioned by created_at. Both gaps have the same fix: a small
 // dedicated, non-partitioned job_idempotency_keys(idempotency_key PK,
 // job_id) lookup table checked/inserted in the same transaction as job
-// creation -- flagged in docs/09-design-rationale.md as a pre-production
-// follow-up rather than solved here, given the current scope.
+// creation. That's flagged in docs/09-design-rationale.md as a
+// pre-production follow-up rather than solved here, given the current scope.
 func (s *JobStore) Create(ctx context.Context, p CreateJobParams) (job Job, wasExisting bool, err error) {
 	if p.Labels == nil {
 		p.Labels = map[string]string{}
@@ -144,7 +144,7 @@ func (s *JobStore) Get(ctx context.Context, jobID string) (Job, error) {
 	return j, nil
 }
 
-// CountQueuedByPriority backs internal/metrics's queue-depth gauge -- a
+// CountQueuedByPriority backs internal/metrics's queue-depth gauge: a
 // single GROUP BY rather than 10 separate List(status=QUEUED, priority=N)
 // calls, since this runs on every Collector tick.
 func (s *JobStore) CountQueuedByPriority(ctx context.Context) (map[int16]int32, error) {
@@ -183,8 +183,8 @@ func (s *JobStore) List(ctx context.Context, f ListJobsFilter) ([]Job, error) {
 	// Built dynamically rather than one static query with "$1 = '' OR
 	// status = $1"-style fallbacks: status is the job_status ENUM column,
 	// and a parameter that Postgres infers as text (from the "= ''"
-	// branch) has no implicit cast to a custom enum type -- the same class
-	// of pgx/Postgres type-inference failure as the interval bug in
+	// branch) has no implicit cast to a custom enum type. It's the same
+	// class of pgx/Postgres type-inference failure as the interval bug in
 	// ListStale (see the comment there). Building the predicate list only
 	// when a filter is actually supplied sidesteps the issue rather than
 	// fighting enum casts inline.
@@ -247,7 +247,7 @@ func (s *JobStore) List(ctx context.Context, f ListJobsFilter) ([]Job, error) {
 // worker's own heartbeat confirms it has picked the job up
 // (docs/05-sequence-diagrams.md 5.4). assignmentEpoch is the worker's
 // epoch at assignment time (jobs.assignment_epoch was set to exactly this
-// value by WorkerStore.AssignJob) -- passing the worker's CURRENT epoch
+// value by WorkerStore.AssignJob). Passing the worker's CURRENT epoch
 // here means a worker that has since re-registered (and so holds a new,
 // different epoch) can never accidentally mark a stale assignment as
 // running.
@@ -310,8 +310,8 @@ func retryBackoff(attempt int32) time.Duration {
 // (ASSIGNED,RUNNING)) predicate Complete uses, for the identical
 // stale/duplicate-report discard reason (docs/06-failure-scenarios.md #10).
 //
-// workerID is recorded on the job_retry_history row for audit purposes only
-// -- it is NOT part of the guard (the assignment_epoch already proves which
+// workerID is recorded on the job_retry_history row for audit purposes only;
+// it is NOT part of the guard (the assignment_epoch already proves which
 // worker/attempt this report belongs to).
 func (s *JobStore) RetryOrFail(ctx context.Context, jobID string, jobCreatedAt time.Time, assignmentEpoch int64, workerID *string, errorMessage string, logRef string) (newStatus string, ok bool, err error) {
 	var logRefArg, errMsgArg *string
@@ -333,7 +333,7 @@ func (s *JobStore) RetryOrFail(ctx context.Context, jobID string, jobCreatedAt t
 		if scanErr := row.Scan(&retries, &maxRetries); scanErr != nil {
 			if errors.Is(scanErr, pgx.ErrNoRows) {
 				ok = false
-				return nil // stale/duplicate report -- same discard as Complete
+				return nil // stale/duplicate report, same discard as Complete
 			}
 			return fmt.Errorf("lookup job for retry decision: %w", scanErr)
 		}
@@ -395,8 +395,8 @@ type DueRetry struct {
 	RequiredCapabilities []string
 }
 
-// ListDueRetries finds RETRYING jobs whose backoff window has elapsed --
-// the read side of docs/03-database-schema.md 3.2's idx_jobs_retrying_due.
+// ListDueRetries finds RETRYING jobs whose backoff window has elapsed: the
+// read side of docs/03-database-schema.md 3.2's idx_jobs_retrying_due.
 func (s *JobStore) ListDueRetries(ctx context.Context, limit int) ([]DueRetry, error) {
 	if limit <= 0 || limit > 1000 {
 		limit = 100

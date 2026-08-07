@@ -116,7 +116,7 @@ CREATE TABLE workers (
     CONSTRAINT uq_workers_instance_id UNIQUE (instance_id)
 );
 
--- Hot path: "find READY workers matching capability X" — the scheduler's most
+-- Hot path: "find READY workers matching capability X", the scheduler's most
 -- frequent query. Partial index keeps it tiny even with 10k+ historical rows.
 CREATE INDEX idx_workers_status_ready
     ON workers (status)
@@ -136,7 +136,7 @@ CREATE TRIGGER trg_workers_updated_at
     FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- =========================================================
--- jobs  (RANGE partitioned by created_at — see 3.3 on why)
+-- jobs  (RANGE partitioned by created_at; see 3.3 on why)
 -- =========================================================
 CREATE TABLE jobs (
     id                      UUID NOT NULL DEFAULT gen_random_uuid(),
@@ -187,7 +187,7 @@ CREATE INDEX idx_jobs_worker_id ON jobs (worker_id)
 CREATE INDEX idx_jobs_repo_branch ON jobs (repository, branch, created_at DESC);
 CREATE INDEX idx_jobs_commit_sha ON jobs (commit_sha);
 
--- Time-range scans across all history (dashboards, retention jobs) —
+-- Time-range scans across all history (dashboards, retention jobs):
 -- BRIN is far smaller than BTREE for an append-mostly, time-ordered table.
 CREATE INDEX idx_jobs_created_at_brin ON jobs USING BRIN (created_at);
 
@@ -218,7 +218,7 @@ CREATE TABLE job_retry_history (
 CREATE INDEX idx_retry_history_job_id ON job_retry_history (job_id);
 
 -- =========================================================
--- worker_events / job_events — append-only audit log
+-- worker_events / job_events: append-only audit log
 -- (cheap insurance for debugging "why did this happen" post-incident)
 -- =========================================================
 CREATE TABLE worker_events (
@@ -252,18 +252,18 @@ $$ LANGUAGE plpgsql;
 
 ## 3.3 Design notes / performance considerations
 
-**Why `jobs` is partitioned by `created_at` and `workers` is not.** At "millions of jobs" scale, an unpartitioned `jobs` table means every index keeps growing forever and vacuum/autovacuum has to walk the whole table. Monthly range partitions mean: old partitions can be detached and archived to cold storage (or just dropped after a retention period) in O(1) instead of a `DELETE` that scans and generates enormous WAL; the active partition (current month) stays small, so the hot indexes (`idx_jobs_queued_priority` especially) stay in memory. `workers` tops out at ~10,000 live rows by requirement — no partitioning benefit, and partitioning would complicate the FK from `jobs.worker_id`.
+**Why `jobs` is partitioned by `created_at` and `workers` is not.** At "millions of jobs" scale, an unpartitioned `jobs` table means every index keeps growing forever and vacuum/autovacuum has to walk the whole table. Monthly range partitions mean: old partitions can be detached and archived to cold storage (or just dropped after a retention period) in O(1) instead of a `DELETE` that scans and generates enormous WAL; the active partition (current month) stays small, so the hot indexes (`idx_jobs_queued_priority` especially) stay in memory. `workers` tops out at ~10,000 live rows by requirement, so there's no partitioning benefit, and partitioning would complicate the FK from `jobs.worker_id`.
 
 **Why the scheduling query is a partial index, not a full one.** `idx_jobs_queued_priority` only indexes rows where `status = 'QUEUED'`. Once a job leaves QUEUED it's dead weight in that index. Given the ratio of terminal jobs to queued jobs at any instant is enormous (most jobs, most of the time, are SUCCESS/FAILED history), this keeps the scheduler's hottest query touching a tiny, cache-resident index instead of scanning entries for millions of finished jobs.
 
 **Why `current_job_id` on `workers` duplicates information already in `jobs.worker_id`.** It's a deliberate denormalization for a single reason: the scheduler's assignment transaction needs to atomically flip both "this worker is now BUSY with job X" and "this job is now ASSIGNED to worker X" in one statement/transaction, and having the pointer on both rows lets that be a single `UPDATE ... FROM` (see doc 5) rather than requiring a join to discover a worker's current job on every heartbeat.
 
-**Why `job_retry_history` is a separate table instead of a JSONB array on `jobs`.** Retry history needs its own indexed lookups ("show me all attempts for job X" for the dashboard), and appending to a normalized table is a plain `INSERT` (cheap, no row rewrite), whereas appending to a JSONB column means rewriting the whole (growing) column on every retry — worse write amplification exactly on the path (failed builds) where you can least afford it.
+**Why `job_retry_history` is a separate table instead of a JSONB array on `jobs`.** Retry history needs its own indexed lookups ("show me all attempts for job X" for the dashboard), and appending to a normalized table is a plain `INSERT` (cheap, no row rewrite), whereas appending to a JSONB column means rewriting the whole (growing) column on every retry: worse write amplification exactly on the path (failed builds) where it's least affordable.
 
 **Read replica.** `list jobs` / `list workers` / dashboard queries are pointed at a Postgres read replica via connection routing in the API layer, so dashboard traffic (bursty, human-driven) never contends with the scheduler's write-heavy hot path on the primary.
 
-**What I'd revisit at 10k workers / true production scale:** heartbeat writes are *not* going straight to this schema on every 5s tick (2,000 writes/sec sustained is wasteful and this schema isn't optimized for that write pattern) — Redis absorbs that, and Postgres gets throttled/batched updates. See doc 4 for exactly how. If dashboard read load ever gets heavy enough that even the replica struggles, the next step is a materialized summary table (`worker_status_summary`, `job_queue_depth_by_priority`) refreshed every few seconds instead of querying `workers`/`jobs` directly for aggregate views.
+**What to revisit at 10k workers / true production scale:** heartbeat writes are *not* going straight to this schema on every 5s tick (2,000 writes/sec sustained is wasteful and this schema isn't optimized for that write pattern); Redis absorbs that, and Postgres gets throttled/batched updates. See doc 4 for exactly how. If dashboard read load ever gets heavy enough that even the replica struggles, the next step is a materialized summary table (`worker_status_summary`, `job_queue_depth_by_priority`) refreshed every few seconds instead of querying `workers`/`jobs` directly for aggregate views.
 
 ---
 
-**Next:** doc 4, the Redis data model — how the write-heavy heartbeat path avoids hammering this schema.
+**Next:** doc 4, the Redis data model: how the write-heavy heartbeat path avoids hammering this schema.

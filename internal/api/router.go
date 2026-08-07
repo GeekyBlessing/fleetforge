@@ -24,7 +24,7 @@ import (
 // empty means auth is off (local dev / CI, unchanged from before this was
 // added), non-empty means POST /jobs requires the "jobs:submit" scope and
 // the drain/resume endpoints require "workers:drain" on a valid, unexpired
-// bearer token (internal/auth). Read-only GETs stay open either way -- low
+// bearer token (internal/auth). Read-only GETs stay open either way: low
 // risk, and keeps ad-hoc curl/fleetforgectl inspection unauthenticated.
 func NewRouter(
 	workerStore *postgres.WorkerStore,
@@ -62,7 +62,7 @@ func NewRouter(
 		r.Get("/jobs/{jobId}", jobs.GetJob)
 	})
 
-	// Uses the default Prometheus registry/gatherer -- internal/metrics's
+	// Uses the default Prometheus registry/gatherer: internal/metrics's
 	// collectors are registered against prometheus.DefaultRegisterer once
 	// in cmd/scheduler/main.go, so this handler needs no explicit registry
 	// wiring of its own.
@@ -77,7 +77,7 @@ func NewRouter(
 		status := http.StatusOK
 		if !pgOK {
 			// Redis unreachable degrades gracefully (doc 6 #4); Postgres
-			// unreachable does not (doc 6 #5) -- readiness reflects that
+			// unreachable does not (doc 6 #5); readiness reflects that
 			// asymmetry rather than treating both dependencies the same.
 			status = http.StatusServiceUnavailable
 		}

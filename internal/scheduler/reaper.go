@@ -14,7 +14,7 @@ import (
 )
 
 // Reaper implements the dead-worker detection sweep from
-// docs/05-sequence-diagrams.md 5.3. It is the AUTHORITATIVE mechanism --
+// docs/05-sequence-diagrams.md 5.3. It is the AUTHORITATIVE mechanism:
 // Redis's TTL-based alive key (doc 4.2.1) is only a latency optimization
 // layered on top; if Redis is down entirely, or a keyspace notification is
 // dropped, this sweep still catches every stale worker within one interval
@@ -48,8 +48,8 @@ func NewReaper(
 // as isLeader() reports true.
 //
 // Gating on leadership (internal/scheduler/leader.go) matters more for
-// correctness-adjacent efficiency than correctness itself
-// -- MarkDeadAndRequeue's epoch-guarded UPDATE already makes a second
+// correctness-adjacent efficiency than correctness itself:
+// MarkDeadAndRequeue's epoch-guarded UPDATE already makes a second
 // concurrent reaper's attempt a harmless no-op (RowsAffected()==0), but
 // letting every replica hammer the same query every 5s is still wasted
 // work once there's more than one replica.
@@ -83,7 +83,7 @@ func (r *Reaper) sweep(ctx context.Context) {
 		}
 		if err := r.cache.Delete(ctx, w.ID); err != nil {
 			// Non-fatal: both cache keys carry their own TTL and would
-			// expire on their own (doc 4.2.1) -- log and move on rather
+			// expire on their own (doc 4.2.1); log and move on rather
 			// than treat this as a sweep failure.
 			r.log.Warn().Err(err).Str("worker_id", w.ID).Msg("failed to clear redis cache for dead worker")
 		}

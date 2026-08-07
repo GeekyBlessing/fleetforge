@@ -16,7 +16,7 @@ import (
 
 const numPriorities = 10
 
-// Loop is the scheduler's matching/assignment brain --
+// Loop is the scheduler's matching/assignment brain:
 // docs/05-sequence-diagrams.md 5.4. It reads job messages from the Redis
 // Streams queue (highest priority first, by stream key order), filters
 // candidate workers by capability, ranks survivors by least-loaded, and
@@ -52,7 +52,7 @@ func NewLoop(
 	}
 }
 
-// Run blocks until ctx is cancelled. When not the leader, it just waits --
+// Run blocks until ctx is cancelled. When not the leader, it just waits;
 // only the elected leader consumes from the shared consumer group (doc
 // 1.3: standby replicas still serve REST/gRPC traffic, they just don't
 // schedule).
@@ -88,7 +88,7 @@ func (l *Loop) tick(ctx context.Context) {
 	// loop from busy-spinning when the queue is empty.
 	l.readAndProcess(ctx, keys, ">", 1*time.Second)
 
-	// Pass 2: this consumer's own previously-unmatched pending entries --
+	// Pass 2: this consumer's own previously-unmatched pending entries,
 	// the practical stand-in for doc 4.1's XCLAIM-based PEL recovery. A job
 	// that had no capable/available worker on a prior tick is left
 	// unacknowledged (still in the PEL); reading with ID "0" returns this
@@ -147,29 +147,26 @@ func (l *Loop) processMessage(ctx context.Context, streamKey string, msg goredis
 	if err != nil {
 		if errors.Is(err, postgres.ErrJobNotFound) {
 			// Genuinely gone (never existed under this ID, or some future
-			// hard-delete path) -- safe to drop for good.
+			// hard-delete path); safe to drop for good.
 			l.log.Warn().Str("job_id", jobID).Msg("job not found, acking and dropping from queue")
 			l.ack(ctx, streamKey, msg.ID)
 			return
 		}
-		// Real bug, caught by actually running this: this used to treat
-		// EVERY error from Get (including a transient Postgres blip -- a
-		// connection pool hiccup, a brief reconnect after restarting the
-		// scheduler mid-test, anything) as "job was cancelled, safe to drop
-		// forever." A transient error acked-and-dropped the message anyway,
-		// permanently orphaning an otherwise-perfectly-valid QUEUED job:
-		// its Postgres row stayed QUEUED forever, but nothing would ever
-		// see it again, since its one and only stream entry was gone from
-		// the consumer group's pending list. Only a genuine "not found" (the
-		// branch above) should ever drop a message; anything else needs to
-		// stay unacked and retry next tick, same as the ListReadyCandidates/
-		// AssignJob error paths below already correctly do.
+		// Only a genuine ErrJobNotFound (the branch above) should ever drop
+		// a message. Any other error, including a transient Postgres blip
+		// such as a connection pool hiccup or a brief reconnect, must stay
+		// unacked and retry next tick, same as the ListReadyCandidates/
+		// AssignJob error paths below. Treating every Get error as "job
+		// cancelled, safe to drop" would ack-and-drop the message for a job
+		// that's still QUEUED in Postgres, permanently orphaning it since
+		// its one and only stream entry would vanish from the consumer
+		// group's pending list.
 		l.log.Error().Err(err).Str("job_id", jobID).Msg("failed to load job, leaving unacked to retry next tick")
 		return
 	}
 	if job.Status != "QUEUED" {
 		// Already assigned/completed/cancelled via some other path since
-		// this entry was queued -- nothing left to do with it.
+		// this entry was queued; nothing left to do with it.
 		l.ack(ctx, streamKey, msg.ID)
 		return
 	}
@@ -177,13 +174,13 @@ func (l *Loop) processMessage(ctx context.Context, streamKey string, msg goredis
 	candidates, err := l.workers.ListReadyCandidates(ctx, requiredCaps)
 	if err != nil {
 		l.log.Error().Err(err).Str("job_id", jobID).Msg("failed to list candidate workers")
-		return // leave unacked -- retried next tick's pending-entries pass
+		return // leave unacked; retried next tick's pending-entries pass
 	}
 
 	chosen := SelectLeastLoaded(candidates)
 	if chosen == nil {
-		// No capable/available worker right now. Left unacked deliberately
-		// -- this job stays QUEUED in Postgres, which is exactly the
+		// No capable/available worker right now. Left unacked deliberately:
+		// this job stays QUEUED in Postgres, which is exactly the
 		// unmet-demand signal the autoscaler watches for
 		// (docs/09-design-rationale.md 9.2), and the pending-entries pass
 		// retries it every tick without needing a separate backlog data
@@ -201,7 +198,7 @@ func (l *Loop) processMessage(ctx context.Context, streamKey string, msg goredis
 		return
 	}
 
-	// AssignJob writes straight to Postgres and never touches Redis --
+	// AssignJob writes straight to Postgres and never touches Redis;
 	// without this, the cache's "status" field would keep showing READY
 	// until the worker's OWN next heartbeat overwrites it, and
 	// internal/grpcserver/heartbeat.go's assignment-push check (which reads

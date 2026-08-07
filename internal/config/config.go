@@ -1,5 +1,5 @@
 // Package config centralizes environment/flag-based configuration for all
-// three binaries. Kept deliberately dumb (no viper/koanf) -- this service
+// three binaries. Kept deliberately dumb (no viper/koanf): this service
 // has a small, stable set of settings and a plain os.Getenv wrapper is one
 // less dependency and one less thing to explain to a new contributor.
 package config
@@ -22,7 +22,7 @@ type SchedulerConfig struct {
 	HeartbeatTimeoutSeconds  int
 
 	// JWTSecret gates internal/api's write endpoints (POST /jobs,
-	// drain/resume) via internal/auth -- see docs/09-design-rationale.md
+	// drain/resume) via internal/auth; see docs/09-design-rationale.md
 	// 9.4. Empty means auth is off, matching every environment (local dev,
 	// CI) that existed before this was added; set FLEETFORGE_JWT_SECRET to
 	// turn it on.
@@ -30,7 +30,7 @@ type SchedulerConfig struct {
 
 	// mTLS for the worker<->scheduler gRPC control plane
 	// (docs/09-design-rationale.md 9.4). All three unset means insecure
-	// credentials, same as before this was added -- see
+	// credentials, same as before this was added; see
 	// scripts/gen-certs.sh to generate a local CA + server/client cert pair
 	// for turning this on.
 	TLSCertFile string
@@ -39,7 +39,7 @@ type SchedulerConfig struct {
 }
 
 // LoadSchedulerConfig reads configuration from the environment. Only
-// FLEETFORGE_DATABASE_URL is required -- a missing Redis address doesn't
+// FLEETFORGE_DATABASE_URL is required: a missing Redis address doesn't
 // fail startup, since Postgres alone is enough to serve reads/registration
 // even if Redis is unreachable (docs/06-failure-scenarios.md #4).
 func LoadSchedulerConfig() (SchedulerConfig, error) {
@@ -74,7 +74,7 @@ func LoadSchedulerConfig() (SchedulerConfig, error) {
 // WorkerAgentConfig holds everything cmd/worker-agent needs to start.
 type WorkerAgentConfig struct {
 	SchedulerGRPCAddr string
-	InstanceID        string // stable across restarts -- see docs/05-sequence-diagrams.md 5.1
+	InstanceID        string // stable across restarts; see docs/05-sequence-diagrams.md 5.1
 	Hostname          string
 	OS                string
 	CPUCores          int
@@ -83,9 +83,9 @@ type WorkerAgentConfig struct {
 	CapacitySlots     int
 	Labels            map[string]string
 	Capabilities      []string
-	SimulatedFailureRate float64 // 0.0-1.0 -- see worker-agent-runtime.SimulatedExecutor
+	SimulatedFailureRate float64 // 0.0-1.0; see worker-agent-runtime.SimulatedExecutor
 
-	// mTLS client identity for dialing the scheduler -- mirrors
+	// mTLS client identity for dialing the scheduler; mirrors
 	// SchedulerConfig's TLS fields; see scripts/gen-certs.sh. All three
 	// unset means insecure credentials, unchanged from before this existed.
 	TLSCertFile string
@@ -153,7 +153,7 @@ func LoadWorkerAgentConfig() (WorkerAgentConfig, error) {
 
 // parseLabels reads "region=us-east-1,arch=amd64" into a map. Malformed
 // entries (no "=") are skipped rather than erroring the whole agent startup
-// over a typo in an operator-supplied env var -- labels are used for
+// over a typo in an operator-supplied env var: labels are used for
 // scheduling affinity, not for anything safety-critical, so failing soft
 // here is the right trade-off.
 func parseLabels(raw string) map[string]string {

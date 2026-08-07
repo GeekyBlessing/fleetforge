@@ -2,7 +2,7 @@
 // server for humans/CI, the dead-worker reaper, and the scheduling loop
 // itself, all gated behind Postgres-advisory-lock leader
 // election (docs/09-design-rationale.md 9.6) so that running more than one
-// replica is safe -- only the elected leader reaps or schedules; every
+// replica is safe: only the elected leader reaps or schedules, and every
 // replica still serves REST/gRPC traffic.
 package main
 
@@ -68,7 +68,7 @@ func main() {
 	//
 	// mTLS (docs/09-design-rationale.md 9.4): only enabled when all three
 	// cert/key/CA paths are configured, so every existing local-dev and CI
-	// setup (none of which set these) is completely unaffected -- see
+	// setup (none of which set these) is completely unaffected. See
 	// scripts/gen-certs.sh to generate a cert pair and turn this on.
 	var grpcOpts []grpc.ServerOption
 	if cfg.TLSCertFile != "" && cfg.TLSKeyFile != "" && cfg.TLSCAFile != "" {
@@ -97,53 +97,52 @@ func main() {
 	leaderElector := scheduler.NewLeaderElector(pool, log)
 	go leaderElector.Run(ctx, 2*time.Second)
 
-	// --- Dead-worker reaper (doc 5.3) -- leader-gated ---
+	// --- Dead-worker reaper (doc 5.3), leader-gated ---
 	reaper := scheduler.NewReaper(
 		workerStore,
 		workerCache,
 		log,
-		5*time.Second, // sweep interval -- see docs/05-sequence-diagrams.md 5.3
+		5*time.Second, // sweep interval; see docs/05-sequence-diagrams.md 5.3
 		cfg.HeartbeatTimeoutSeconds,
 	)
 	go reaper.Run(ctx, leaderElector.IsLeader)
 
-	// --- Retry backoff poller (docs/09-design-rationale.md 9.3) --
-	// leader-gated, same reasoning as the reaper above.
+	// --- Retry backoff poller (docs/09-design-rationale.md 9.3) ---
+	// Leader-gated, same reasoning as the reaper above.
 	retryPoller := scheduler.NewRetryPoller(jobStore, jobQueue, log, 2*time.Second)
 	go retryPoller.Run(ctx, leaderElector.IsLeader)
 
 	// --- Metrics ---
-	// Registered once, here, against the DEFAULT registry -- promhttp.Handler()
+	// Registered once, here, against the DEFAULT registry: promhttp.Handler()
 	// in internal/api/router.go reads from that same default registry/gatherer,
 	// so no Registry object needs to be threaded through main() and the router.
 	metrics.MustRegister(prometheus.DefaultRegisterer)
 	metricsCollector := metrics.NewCollector(jobStore, workerStore, log, 10*time.Second)
 	go metricsCollector.Run(ctx)
 
-	// --- Autoscaler (docs/09-design-rationale.md 9.2) -- leader-gated ---
+	// --- Autoscaler (docs/09-design-rationale.md 9.2), leader-gated ---
 	autoscaler := scheduler.NewAutoscaler(
 		workerStore,
 		jobStore,
 		workerCache,
 		log,
 		scheduler.DefaultAutoscalerConfig(),
-		15*time.Second, // decision interval -- independent of the cooldown windows inside AutoscalerConfig, which bound how often it actually ACTS
+		15*time.Second, // decision interval; independent of the cooldown windows inside AutoscalerConfig, which bound how often it actually ACTS
 	)
 	go autoscaler.Run(ctx, leaderElector.IsLeader)
 
-	// --- Scheduling loop (doc 5.4) -- leader-gated ---
+	// --- Scheduling loop (doc 5.4), leader-gated ---
 	//
 	// Deliberately a FIXED consumer name, not a random one per process
-	// start (a real bug, caught by actually restarting this process
-	// repeatedly during testing): Redis tracks pending stream entries per
-	// consumer NAME. Only the elected leader ever actively reads from the
-	// consumer group at a time, so there's never a real collision to worry
-	// about -- but a random name-per-restart means a restarted (or
-	// newly-elected) scheduler can never see its own previous run's
-	// still-pending, not-yet-acked entries, which then sit stuck forever
-	// under a consumer identity nothing will ever check again. A fixed
-	// name is what makes doc 4.1's "pending entries survive a restart"
-	// property actually true.
+	// start: Redis tracks pending stream entries per consumer NAME. Only
+	// the elected leader ever actively reads from the consumer group at a
+	// time, so there's never a real collision to worry about. A random
+	// name per restart would mean a restarted (or newly-elected) scheduler
+	// could never see its own previous run's still-pending, not-yet-acked
+	// entries, which would then sit stuck forever under a consumer
+	// identity nothing will ever check again. A fixed name is what makes
+	// doc 4.1's "pending entries survive a restart" property actually
+	// true.
 	consumerName := "scheduler-leader"
 	schedulingLoop := scheduler.NewLoop(
 		workerStore,

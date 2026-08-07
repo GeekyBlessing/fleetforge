@@ -1,29 +1,29 @@
 #!/usr/bin/env python3
-"""Chaos test: docs/06-failure-scenarios.md scenario #6 -- a worker that's
+"""Chaos test: docs/06-failure-scenarios.md scenario #6: a worker that's
 still alive but can't reach the scheduler (network partition), as opposed
 to kill_worker.py's outright crash.
 
 Simulated by SIGSTOP'ing a real `bin/worker-agent` process rather than
-killing it -- this freezes it entirely (it can't send heartbeats, but its
+killing it: this freezes it entirely (it can't send heartbeats, but its
 TCP connection isn't cleanly closed either), which is a closer
 approximation of "partitioned, not crashed" than a process exit. A fully
 faithful version would sever the connection at the network level (e.g.
-via toxiproxy) rather than freezing the process -- noted in
+via toxiproxy) rather than freezing the process; noted in
 docs/09-design-rationale.md's open-scope list as a reasonable follow-up,
 not solved here.
 
 Asserts two things doc 6 #6 and doc 5.3's edge case #1 both depend on:
 
-  1. The frozen worker is detected exactly like a crash -- marked DEAD
+  1. The frozen worker is detected exactly like a crash: marked DEAD
      after the heartbeat timeout (scenario #3's detection path is
      scenario-agnostic by design).
   2. Once resumed (SIGCONT), the worker-agent's OWN contract fires: on
      reconnecting with its now-stale epoch, the scheduler rejects it, and
      the agent fatal-exits demanding re-registration rather than silently
-     resuming as if nothing happened. This is the split-brain guard --
+     resuming as if nothing happened. This is the split-brain guard,
      verified here by grepping the resumed process's own log output for
-     the same "must re-register" rejection this project hit live during
-     manual testing earlier in development.
+     the "must re-register" rejection the worker-agent contract requires
+     it to emit, rather than asserting on internal state directly.
 
 Prerequisites:
     make build                    # produces bin/worker-agent
@@ -57,7 +57,7 @@ def get_worker(worker_id: str) -> dict | None:
 def find_worker_by_instance(instance_id_marker: str) -> dict | None:
     # There's no GET /workers?instance_id=... filter, so cross-reference by
     # hostname instead (worker-agent defaults hostname to os.Hostname(),
-    # which won't contain our marker -- so this script sets FLEETFORGE_HOSTNAME
+    # which won't contain our marker, so this script sets FLEETFORGE_HOSTNAME
     # explicitly to make matching reliable rather than guessing).
     body = http_get(f"{REST_BASE}/v1/workers")
     for w in body.get("items", []):
@@ -108,7 +108,7 @@ def main() -> int:
         def saw_rejection():
             if worker_proc.poll() is None:
                 return False  # hasn't exited yet
-            return True  # exited -- caller checks the log content below
+            return True  # exited; caller checks the log content below
 
         exited = wait_until(saw_rejection, timeout=REJECTION_TIMEOUT_S)
         output = worker_proc.stdout.read() if worker_proc.stdout else ""

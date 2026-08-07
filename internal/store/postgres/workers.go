@@ -96,13 +96,11 @@ func (s *WorkerStore) Register(ctx context.Context, p RegisterWorkerParams) (Reg
 				-- session went stale keeps that session's ancient
 				-- last_heartbeat value, which makes it look immediately
 				-- "stale" to the reaper (ListStale) before it has even had a
-				-- chance to send its first heartbeat under the new epoch --
-				-- a real bug caught by actually running this (see git log /
-				-- session notes), not a hypothetical. This NULL is
-				-- momentary: the promote-to-READY step below overwrites it
-				-- with now() in the same transaction, closing a second,
-				-- related bug (see that step's comment) rather than
-				-- reopening it.
+				-- chance to send its first heartbeat under the new epoch.
+				-- This NULL is momentary: the promote-to-READY step below
+				-- overwrites it with now() in the same transaction, closing
+				-- a second, related issue (see that step's comment) rather
+				-- than reopening it.
 				last_heartbeat          = NULL,
 				epoch                   = workers.epoch + 1,
 				updated_at              = now()
@@ -123,28 +121,29 @@ func (s *WorkerStore) Register(ctx context.Context, p RegisterWorkerParams) (Reg
 			return fmt.Errorf("insert worker_events: %w", err)
 		}
 
-		// Two statements rather than folding READY into the upsert above
+		// Two statements rather than folding READY into the upsert above,
 		// because the audit event should record the transition, and doing it
 		// as a distinct step keeps this method's shape identical to how the
-		// reaper similarly does "state change + event insert" as a pair --
-		// one consistent pattern across the codebase for "on top of a state
+		// reaper similarly does "state change + event insert" as a pair: one
+		// consistent pattern across the codebase for "on top of a state
 		// change, always drop a breadcrumb".
-		// last_heartbeat is also stamped here, not left at the NULL the
-		// insert/upsert above just set. Real bug, caught by chaos-testing
-		// scenario #3: worker-agent's heartbeat loop uses time.NewTicker,
-		// which fires only AFTER the first interval elapses (5s by
-		// default), so a worker that crashes before its first heartbeat
-		// -- entirely possible, since the scheduler can assign a job
-		// within milliseconds of registration, well before that first
-		// tick -- left last_heartbeat NULL forever. ListStale (below)
-		// requires last_heartbeat IS NOT NULL, so that worker, and
-		// whatever job it was assigned, could never be reaped: stuck
-		// BUSY/ASSIGNED permanently. Stamping now() here closes the
-		// window (the worker becomes reapable timeoutSeconds after
-		// registration even if it never sends a single heartbeat) without
-		// reintroducing the OTHER bug this line originally guarded
-		// against (a re-registering worker's stale old timestamp making
-		// it look instantly dead) -- now() is always fresh, never stale.
+		//
+		// last_heartbeat is also stamped here rather than left at the NULL
+		// the insert/upsert above just set. worker-agent's heartbeat loop
+		// uses time.NewTicker, which fires only after the first interval
+		// elapses (5s by default), so a worker that crashes before its
+		// first heartbeat (entirely possible, since the scheduler can
+		// assign a job within milliseconds of registration, well before
+		// that first tick) would leave last_heartbeat NULL forever.
+		// ListStale (below) requires last_heartbeat IS NOT NULL, so that
+		// worker, and whatever job it was assigned, could never be
+		// reaped: stuck BUSY/ASSIGNED permanently. Stamping now() here
+		// closes that window (the worker becomes reapable timeoutSeconds
+		// after registration even if it never sends a single heartbeat)
+		// without reintroducing the other bug this line originally
+		// guarded against (a re-registering worker's stale old timestamp
+		// making it look instantly dead): now() is always fresh, never
+		// stale.
 		if _, err := tx.Exec(ctx, `UPDATE workers SET status = 'READY', last_heartbeat = now() WHERE id = $1`, result.ID); err != nil {
 			return fmt.Errorf("promote worker to ready: %w", err)
 		}
@@ -178,7 +177,7 @@ type WorkerRow struct {
 	DrainRequested      bool
 }
 
-// CountByStatus backs internal/metrics's worker-count gauge -- one GROUP BY
+// CountByStatus backs internal/metrics's worker-count gauge: one GROUP BY
 // rather than 6 separate List(status=X) calls.
 func (s *WorkerStore) CountByStatus(ctx context.Context) (map[string]int32, error) {
 	rows, err := s.pool.Query(ctx, `SELECT status, COUNT(*) FROM workers GROUP BY status`)
@@ -202,10 +201,10 @@ func (s *WorkerStore) CountByStatus(ctx context.Context) (map[string]int32, erro
 // PickDrainCandidate implements the "never touch BUSY workers" rule from
 // docs/09-design-rationale.md 9.2 point 3: the autoscaler's scale-down path
 // only ever selects a fully-idle worker (READY, available_capacity ==
-// capacity_slots -- not just READY with SOME spare capacity, since a
+// capacity_slots, not just READY with SOME spare capacity, since a
 // worker mid-way through other work under a higher capacity_slots value
 // shouldn't be drained either) that isn't already draining. Returns "" (not
-// an error) if nothing qualifies right now -- scale-down simply does
+// an error) if nothing qualifies right now: scale-down simply does
 // nothing that tick rather than force a pick.
 func (s *WorkerStore) PickDrainCandidate(ctx context.Context) (string, error) {
 	var id string
@@ -226,7 +225,7 @@ func (s *WorkerStore) PickDrainCandidate(ctx context.Context) (string, error) {
 
 // List returns workers matching an optional status filter, most-recently
 // registered first, capped at limit. Cursor-based pagination (per
-// docs/02-openapi.yaml) is a real gap here -- offset-free "first N"
+// docs/02-openapi.yaml) is a real gap here: offset-free "first N"
 // semantics are enough while the fleet stays small; doc 2's full keyset
 // pagination lands whenever list traffic actually needs it.
 func (s *WorkerStore) List(ctx context.Context, statusFilter string, limit int) ([]WorkerRow, error) {
@@ -282,7 +281,7 @@ func (s *WorkerStore) List(ctx context.Context, statusFilter string, limit int) 
 }
 
 // GetEpochAndStatus is the fallback path used when the Redis cache misses
-// (cold start, brief Redis outage) -- see docs/05-sequence-diagrams.md 5.2.
+// (cold start, brief Redis outage); see docs/05-sequence-diagrams.md 5.2.
 // Returns a not-found-ish error if the worker doesn't exist so the gRPC
 // layer can map it to codes.NotFound (worker was reaped, must re-register).
 func (s *WorkerStore) GetEpochAndStatus(ctx context.Context, workerID string) (epoch int64, status string, drainRequested bool, err error) {
@@ -294,7 +293,7 @@ func (s *WorkerStore) GetEpochAndStatus(ctx context.Context, workerID string) (e
 }
 
 // UpdateHeartbeat is the batched/coalesced write path from
-// docs/05-sequence-diagrams.md 5.2 -- called on a status transition or
+// docs/05-sequence-diagrams.md 5.2: called on a status transition or
 // after the coalescing window elapses, not on every single 5s heartbeat.
 // The epoch in the WHERE clause is the fencing guard: if a worker was
 // re-registered (crash/restart) since this heartbeat's epoch was read, this
@@ -304,7 +303,7 @@ func (s *WorkerStore) UpdateHeartbeat(ctx context.Context, workerID string, epoc
 	var currentJobCreatedAt *time.Time
 	if currentJobID != nil {
 		// Needed alongside current_job_id for the same reason as
-		// registration -- see workers.current_job_created_at comment in
+		// registration; see workers.current_job_created_at comment in
 		// migration 000002. Look up the job's created_at (its partition
 		// key) so the composite FK stays satisfiable.
 		if err := s.pool.QueryRow(ctx, `SELECT created_at FROM jobs WHERE id = $1`, *currentJobID).Scan(&currentJobCreatedAt); err != nil {
@@ -326,7 +325,7 @@ func (s *WorkerStore) UpdateHeartbeat(ctx context.Context, workerID string, epoc
 	return tag.RowsAffected() == 1, nil
 }
 
-// StaleWorker is the reaper's sweep result -- doc 5.3.
+// StaleWorker is the reaper's sweep result (doc 5.3).
 type StaleWorker struct {
 	ID    string
 	Epoch int64
@@ -338,7 +337,7 @@ type StaleWorker struct {
 // nothing but Postgres, so it keeps working even if Redis is fully down.
 func (s *WorkerStore) ListStale(ctx context.Context, timeoutSeconds int) ([]StaleWorker, error) {
 	// Numeric interval arithmetic ($1 * interval '1 second'), not string
-	// concatenation ($1 || ' seconds')::interval -- the latter makes
+	// concatenation ($1 || ' seconds')::interval: the latter makes
 	// Postgres infer $1's type as text, which pgx then can't encode a Go
 	// int into (no int->text encode plan). Multiplying against an interval
 	// literal makes Postgres infer a numeric type instead, which pgx's
@@ -383,7 +382,7 @@ func (s *WorkerStore) MarkDeadAndRequeue(ctx context.Context, workerID string, e
 		// running anything anymore (its job, if any, is being requeued in
 		// this same transaction below), so there's nothing left to hold
 		// capacity against. Without this reset, a worker that dies while
-		// BUSY would (if it ever came back and re-registered -- which
+		// BUSY would (if it ever came back and re-registered, which
 		// resets capacity correctly anyway) be fine, but would otherwise
 		// carry a permanently-wrong capacity number in any code path that
 		// doesn't go through re-registration.
@@ -397,14 +396,14 @@ func (s *WorkerStore) MarkDeadAndRequeue(ctx context.Context, workerID string, e
 		}
 		if tag.RowsAffected() == 0 {
 			// Already handled (re-registered under a new epoch, or another
-			// reaper pass already caught it) -- not an error, just nothing
+			// reaper pass already caught it); not an error, just nothing
 			// to do this time.
 			return nil
 		}
 
 		// Requeue any job this worker was still holding. Clearing
 		// worker_id/assignment_epoch is what lets the scheduler's normal
-		// candidate-matching pick it back up on the next pass -- this is
+		// candidate-matching pick it back up on the next pass: this is
 		// the SAME "QUEUED, worker_id=NULL" state a brand-new job starts
 		// in, so no special-case scheduling logic is needed for
 		// requeued-after-death jobs.
@@ -446,7 +445,7 @@ func (s *WorkerStore) MarkDeadAndRequeue(ctx context.Context, workerID string, e
 			// job_retry_history, NOT from jobs.retries: a worker-death
 			// requeue deliberately does NOT increment retries (this is an
 			// infrastructure failure, not counted against the job's
-			// retry budget -- doc 5.3), but uq_retry_attempt(job_id,
+			// retry budget; doc 5.3), but uq_retry_attempt(job_id,
 			// attempt_number) still needs a value that's guaranteed unique
 			// even if the SAME job dies-and-gets-reassigned more than once
 			// while retries stays flat.
@@ -475,7 +474,7 @@ func (s *WorkerStore) MarkDeadAndRequeue(ctx context.Context, workerID string, e
 	})
 }
 
-// Candidate is a scheduling candidate returned by ListReadyCandidates --
+// Candidate is a scheduling candidate returned by ListReadyCandidates;
 // see docs/09-design-rationale.md 9.1 for the capability-filter /
 // least-loaded-ranking split this type supports.
 type Candidate struct {
@@ -530,7 +529,7 @@ func (s *WorkerStore) ListReadyCandidates(ctx context.Context, requiredCapabilit
 // from docs/05-sequence-diagrams.md 5.4: the worker flips READY->BUSY and
 // the job flips QUEUED->ASSIGNED in the SAME transaction, each guarded by a
 // WHERE clause that only matches if the row is still in the expected
-// state. Returns (false, nil) -- not an error -- if the CAS lost a race
+// state. Returns (false, nil), not an error, if the CAS lost a race
 // (the worker was taken by a concurrent assignment, or the job was
 // cancelled/reassigned since the caller read it); the caller
 // (internal/scheduler/loop.go) treats that as "retry next tick against a
@@ -552,7 +551,7 @@ func (s *WorkerStore) AssignJob(ctx context.Context, jobID string, jobCreatedAt 
 			return fmt.Errorf("assign: update worker: %w", err)
 		}
 		if wTag.RowsAffected() != 1 {
-			// Lost the race (or worker no longer matches) -- nothing was
+			// Lost the race (or worker no longer matches); nothing was
 			// changed, so there's nothing to undo; committing this no-op
 			// transaction and committing an explicit rollback are
 			// equivalent here.
@@ -569,12 +568,12 @@ func (s *WorkerStore) AssignJob(ctx context.Context, jobID string, jobCreatedAt 
 		}
 		if jTag.RowsAffected() != 1 {
 			// Job moved on since we read it (cancelled, or somehow already
-			// assigned) -- same "nothing to undo" situation as above, but
+			// assigned): same "nothing to undo" situation as above, but
 			// note the worker-side UPDATE above WILL be committed as part
 			// of this same transaction unless we explicitly undo it. Since
 			// Postgres transactions are all-or-nothing, returning an error
 			// here instead of nil is what forces BOTH updates to roll back
-			// together -- the worker must NOT end up BUSY if the job
+			// together: the worker must NOT end up BUSY if the job
 			// assignment didn't also succeed.
 			return errJobAssignRaceLost
 		}
@@ -595,51 +594,45 @@ var errJobAssignRaceLost = errors.New("assign: job no longer queued")
 
 // FreeWorker returns a worker to READY with no current job, incrementing
 // available_capacity back up. Called once a job's result has been recorded
-// (internal/grpcserver/report_result.go) -- kept idempotent-safe via the
+// (internal/grpcserver/report_result.go), kept idempotent-safe via the
 // epoch guard, same fencing rationale as everywhere else in this file.
 //
 // Returns the post-update available_capacity via RETURNING specifically so
 // the caller can push the same update into the Redis cache
-// (docs/04-redis-data-model.md 4.2) -- this Postgres-only update was a real
-// bug on its own: without also correcting the cache, the cache kept
-// showing status=BUSY with the completed job's ID forever, which made
-// internal/grpcserver/heartbeat.go's assignment-push logic re-push that
-// same already-finished job on every subsequent heartbeat, forever.
-// newStatus is either READY or DRAINING -- a worker whose drain_requested
+// (docs/04-redis-data-model.md 4.2): without also correcting the cache,
+// the cache keeps showing status=BUSY with the completed job's ID
+// indefinitely, which makes internal/grpcserver/heartbeat.go's
+// assignment-push logic re-push that same already-finished job on every
+// subsequent heartbeat, forever.
+// newStatus is either READY or DRAINING: a worker whose drain_requested
 // flag was set while it was BUSY (docs/09-design-rationale.md's operator
 // drain flow) must NOT return to the READY candidate pool just because its
 // current job finished; it goes to DRAINING instead, same as it would have
 // immediately if drain had been requested while it was already idle. The
-// caller mirrors this returned status straight into the Redis cache -- same
-// dual-write reasoning as the availableCapacity return value already had.
+// caller mirrors this returned status straight into the Redis cache, using
+// the same dual-write reasoning as the availableCapacity return value already had.
 func (s *WorkerStore) FreeWorker(ctx context.Context, workerID string, epoch int64) (ok bool, availableCapacity int32, newStatus string, err error) {
-	// Real bug, caught by actually running this (a genuine race, not a
-	// typo): this used to also require `status = 'BUSY'` in the WHERE
+	// This intentionally does not require `status = 'BUSY'` in the WHERE
 	// clause. UpdateHeartbeat (internal/grpcserver/heartbeat.go) writes
-	// whatever status the WORKER itself last self-reported on every single
-	// heartbeat, completely independent of what AssignJob/FreeWorker do to
-	// the same row. The very first heartbeat after an assignment always
-	// reports "READY, no job" (the worker doesn't know about the job yet --
-	// that's what the push in heartbeat.go's RESPONSE is for), and if that
-	// heartbeat's Postgres flush lands in the same window, it briefly
-	// overwrites status back to READY while available_capacity is still 0
-	// from AssignJob's decrement. If a job's completion report happened to
-	// land during that exact window, requiring status='BUSY' here made
-	// this UPDATE match zero rows -- silently leaking a capacity slot
-	// forever (status self-corrects on the worker's next heartbeat, but
-	// nothing ever re-runs this increment). A worker stuck at
-	// status=READY, available_capacity=0 is invisible to
-	// ListReadyCandidates permanently, which is exactly what stalled the
-	// job queue live during testing.
+	// whatever status the worker itself last self-reported on every single
+	// heartbeat, independent of what AssignJob/FreeWorker do to the same
+	// row. The first heartbeat after an assignment always reports "READY,
+	// no job" (the worker doesn't know about the job yet; that's what the
+	// push in heartbeat.go's RESPONSE is for). If that heartbeat's Postgres
+	// flush lands in the same window as a job's completion report,
+	// requiring status='BUSY' here would match zero rows and silently leak
+	// a capacity slot: status self-corrects on the worker's next heartbeat,
+	// but nothing else re-runs this increment, leaving the worker stuck at
+	// status=READY, available_capacity=0, which is invisible to
+	// ListReadyCandidates.
 	//
-	// The fix: don't gate on status at all. The real proof that this is a
-	// legitimate completion already happened one level up -- Complete/
-	// RetryOrFail's guard (assignment_epoch matches AND job.status IN
-	// (ASSIGNED,RUNNING)) is a one-shot transition per job, and
-	// report_result.go only calls FreeWorker when that already succeeded.
-	// All FreeWorker needs to check is that this worker hasn't since
-	// re-registered under a new epoch (which WOULD mean a totally
-	// different worker-generation, e.g. after being reaped and restarted).
+	// The proof that this is a legitimate completion already happened one
+	// level up: Complete/RetryOrFail's guard (assignment_epoch matches AND
+	// job.status IN (ASSIGNED,RUNNING)) is a one-shot transition per job,
+	// and report_result.go only calls FreeWorker once that already
+	// succeeded. All FreeWorker needs to check is that this worker hasn't
+	// since re-registered under a new epoch (which would mean a different
+	// worker generation, e.g. after being reaped and restarted).
 	row := s.pool.QueryRow(ctx, `
 		UPDATE workers
 		SET status = CASE WHEN drain_requested THEN 'DRAINING'::worker_status ELSE 'READY'::worker_status END,
@@ -651,7 +644,7 @@ func (s *WorkerStore) FreeWorker(ctx context.Context, workerID string, epoch int
 	`, workerID, epoch)
 	if scanErr := row.Scan(&availableCapacity, &newStatus); scanErr != nil {
 		if errors.Is(scanErr, pgx.ErrNoRows) {
-			return false, 0, "", nil // epoch mismatch (worker re-registered since) -- not an error, just nothing to free
+			return false, 0, "", nil // epoch mismatch (worker re-registered since); not an error, just nothing to free
 		}
 		return false, 0, "", fmt.Errorf("free worker: %w", scanErr)
 	}
@@ -671,11 +664,11 @@ type DrainResult struct {
 
 // RequestDrain implements the operator-initiated graceful-removal flow
 // (docs/09-design-rationale.md). An idle (READY) worker is flipped straight
-// to DRAINING -- it stops being a scheduling candidate immediately, since
+// to DRAINING: it stops being a scheduling candidate immediately, since
 // WorkerStore.ListReadyCandidates only ever matches status='READY'. A BUSY
 // worker keeps its status (it's still finishing a job) but drain_requested
 // is set so FreeWorker routes it to DRAINING, not READY, once that job
-// completes. A worker already OFFLINE/DEAD can't be drained -- there's
+// completes. A worker already OFFLINE/DEAD can't be drained; there's
 // nothing to gracefully remove.
 func (s *WorkerStore) RequestDrain(ctx context.Context, workerID string) (DrainResult, bool, error) {
 	var r DrainResult
@@ -714,7 +707,7 @@ func (s *WorkerStore) RequestDrain(ctx context.Context, workerID string) (DrainR
 // worker is currently DRAINING (i.e. it wasn't mid-job when resumed, or it
 // finished its last job while draining and is now idle), returns it to
 // READY so it's a scheduling candidate again. A worker that's still BUSY
-// when resumed just has its drain_requested flag cleared -- FreeWorker will
+// when resumed just has its drain_requested flag cleared; FreeWorker will
 // naturally send it to READY (not DRAINING) once it completes, since the
 // flag is gone.
 func (s *WorkerStore) ResumeDrain(ctx context.Context, workerID string) (DrainResult, bool, error) {

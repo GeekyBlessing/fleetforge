@@ -4,13 +4,13 @@ Two independent pieces, run together against a live scheduler
 (`cmd/scheduler`), per docs/08-implementation-roadmap.md Milestone 7 and
 docs/09-design-rationale.md 9.5:
 
-- **`fake_worker.py`** -- simulates a fleet of workers over the real gRPC
+- **`fake_worker.py`**: simulates a fleet of workers over the real gRPC
   control plane (register, heartbeat, execute/report). Without this
   running, submitted jobs have nothing to be assigned to and every
   `locustfile.py` run will just time out waiting for assignment.
-- **`locustfile.py`** -- simulates CI/human traffic submitting jobs over
-  the REST API, and measures submission-to-`ASSIGNED` latency (not just
-  the `POST /jobs` response time) as a named Locust metric,
+- **`locustfile.py`**: simulates CI/human traffic submitting jobs over
+  the REST API, and measures submission-to-`ASSIGNED` latency, not just
+  the `POST /jobs` response time, as a named Locust metric,
   `job_assignment_latency`.
 
 ## Setup
@@ -55,14 +55,14 @@ locust -f locustfile.py --host http://localhost:8080 \
 ```
 
 Locust's summary table at the end reports p50/p95/p99 for both the raw
-`POST /v1/jobs` call and the custom `job_assignment_latency` metric --
-the second one is the real "how long from submission to a worker picking
+`POST /v1/jobs` call and the custom `job_assignment_latency` metric.
+The second one is the real "how long from submission to a worker picking
 it up" number docs/09-design-rationale.md 9.5 asks for.
 `fake_worker.py` separately reports heartbeat round-trip latency
 percentiles when it exits (Ctrl+C, or its `--duration` elapsing).
 
 If the scheduler has `FLEETFORGE_TLS_CERT_FILE`/`KEY_FILE`/`CA_FILE` set
-(mTLS -- see `scripts/gen-certs.sh`), pass the worker client cert to
+(mTLS, see `scripts/gen-certs.sh`), pass the worker client cert to
 `fake_worker.py`:
 
 ```bash

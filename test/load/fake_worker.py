@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""fake_worker.py -- simulates a fleet of FleetForge workers for load
+"""fake_worker.py: simulates a fleet of FleetForge workers for load
 testing (docs/08-implementation-roadmap.md Milestone 7).
 
 Speaks the same gRPC control plane as cmd/worker-agent (RegisterWorker,
 the bidirectional Heartbeat stream, ReportJobResult) so it exercises the
-real scheduler code path -- registration, heartbeat processing, assignment
-push, completion handling -- not a stand-in for it. The only thing that's
+real scheduler code path (registration, heartbeat processing, assignment
+push, completion handling), not a stand-in for it. The only thing that's
 faked is job execution itself: instead of running `docker run`, each
 simulated job just sleeps for a random duration and reports
 success/failure per --failure-rate. This is deliberately Python (like
-locustfile.py) rather than another Go binary -- doc 7's stated reason
+locustfile.py) rather than another Go binary; doc 7's stated reason
 applies here too: spinning up hundreds of lightweight simulated agents is
 an easier fit for Python's async/scripting ergonomics than compiling and
 supervising hundreds of real worker-agent processes, and performance of
@@ -71,7 +71,7 @@ async def run_worker(
     async with channel:
         stub = scheduler_pb2_grpc.FleetSchedulerStub(channel)
 
-        # A stable-per-process instance_id, not a fixed one -- each fake
+        # A stable-per-process instance_id, not a fixed one: each fake
         # worker is its own "machine" for the duration of this run, same as
         # a real worker-agent picks one identity for its whole lifetime
         # (docs/05-sequence-diagrams.md 5.1).
@@ -116,7 +116,7 @@ async def run_worker(
                 )
             except grpc.RpcError:
                 # The scheduler may have already reassigned this job (e.g.
-                # a reaper sweep decided this fake worker looked dead) --
+                # a reaper sweep decided this fake worker looked dead);
                 # not a load-test failure, same discard-on-stale-epoch path
                 # docs/06-failure-scenarios.md #10 documents for the real
                 # worker-agent.
@@ -227,7 +227,7 @@ async def main() -> None:
 
     # A worker whose RegisterWorker call itself failed (bad address, TLS
     # handshake rejected, auth misconfigured) never reaches run_worker's
-    # own try/except -- surface those here instead of letting
+    # own try/except; surface those here instead of letting
     # return_exceptions=True swallow them into a silent "0 assignments, no
     # heartbeat samples" result that gives no clue what actually happened.
     failures = [r for r in results if isinstance(r, Exception) and not isinstance(r, asyncio.CancelledError)]

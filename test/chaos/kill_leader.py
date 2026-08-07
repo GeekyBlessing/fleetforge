@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Chaos test: docs/06-failure-scenarios.md scenario #1 -- the scheduler
+"""Chaos test: docs/06-failure-scenarios.md scenario #1: the scheduler
 leader crashes.
 
 Spins up two real `bin/scheduler` replicas against the same Postgres/Redis
 (the actual leader-election code path, internal/scheduler/leader.go's
-Postgres advisory lock -- not a stand-in for it), confirms exactly one
+Postgres advisory lock, not a stand-in for it), confirms exactly one
 becomes leader, SIGKILLs it, and asserts the standby acquires leadership
 within a bounded window. Doc 6 documents "~1-2s"; this asserts a generous
 10s bound so the test itself doesn't flake on `go build`-adjacent host
-variance -- if it's regularly taking anywhere close to that bound, that's
+variance; if it's regularly taking anywhere close to that bound, that's
 worth investigating even though it technically still "passes".
 
 Prerequisites:

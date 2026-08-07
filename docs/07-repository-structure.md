@@ -1,6 +1,6 @@
 # 7. Repository Structure
 
-Single Go module (monorepo) — scheduler and worker-agent share types, proto definitions, and store clients, which matters because the fencing/epoch logic and status enums must never drift between the two binaries. Python appears only for load/chaos tooling, where its ecosystem (locust, faker, chaos scripting) genuinely beats Go for iteration speed.
+Single Go module (monorepo): scheduler and worker-agent share types, proto definitions, and store clients, which matters because the fencing/epoch logic and status enums must never drift between the two binaries. Python appears only for load/chaos tooling, where its ecosystem (locust, faker, chaos scripting) genuinely beats Go for iteration speed.
 
 ```
 fleetforge/
@@ -9,7 +9,7 @@ fleetforge/
 │   │   └── main.go
 │   ├── worker-agent/           # main() for the worker agent binary
 │   │   └── main.go
-│   └── fleetforgectl/          # CLI for admin ops (drain/resume/submit/list) — thin REST client
+│   └── fleetforgectl/          # CLI for admin ops (drain/resume/submit/list): thin REST client
 │       └── main.go
 │
 ├── internal/
@@ -26,7 +26,7 @@ fleetforge/
 │   │   ├── report_result.go
 │   │   └── interceptors_mtls.go
 │   │
-│   ├── scheduler/               # scheduling core — the actual brain
+│   ├── scheduler/               # scheduling core: the actual brain
 │   │   ├── loop.go                  # main scheduling loop, leader-gated
 │   │   ├── algorithm.go             # capability match + least-loaded + priority (doc 9)
 │   │   ├── assign.go                # the Postgres CAS assignment transaction
@@ -55,7 +55,7 @@ fleetforge/
 │   │       └── ratelimit.go
 │   │
 │   ├── queue/
-│   │   └── backend.go               # queue.Backend interface (Redis Streams today, NATS-swappable later — doc 1.1)
+│   │   └── backend.go               # queue.Backend interface (Redis Streams today, NATS-swappable later; doc 1.1)
 │   │
 │   ├── auth/
 │   │   ├── jwt.go                   # bootstrap token + client JWT verification
@@ -99,14 +99,15 @@ fleetforge/
 │   ├── 00-README.md ... 09-design-rationale.md
 │
 ├── test/
-│   ├── unit/                       # colocated _test.go files per package (Go convention) — this dir is for cross-cutting fixtures
+│   ├── unit/                       # colocated _test.go files per package (Go convention); this dir is for cross-cutting fixtures
 │   ├── integration/                 # spins up real Postgres+Redis via testcontainers, exercises full flows
 │   ├── load/                        # Python + Locust: simulate N workers + job submission rate
 │   │   ├── locustfile.py
 │   │   └── fake_worker.py
-│   └── chaos/                       # Python scripts: kill leader, partition network (via toxiproxy), kill Redis/Postgres mid-flow
-│       ├── kill_leader.py
-│       └── toxiproxy_partition.py
+│   └── chaos/                       # Python scripts against real scheduler/worker-agent binaries (not mocks)
+│       ├── kill_leader.py           # scenario #1: leader crash mid-assignment
+│       ├── kill_worker.py           # scenario #3: worker crash mid-job
+│       └── partition_worker.py      # scenario #6: worker frozen/partitioned, not crashed
 │
 ├── scripts/
 │   ├── gen-proto.sh
@@ -123,9 +124,9 @@ fleetforge/
 
 ## 7.1 Why this shape
 
-**`internal/` vs `pkg/`.** Go convention: `internal/` cannot be imported by any module outside this repo, which is exactly right for the scheduler's guts (nobody outside this project should ever import `internal/scheduler` directly). `pkg/fleetforgeclient` is the one thing meant for external consumption — a generated REST client, so other teams' tooling can talk to FleetForge without hand-rolling HTTP calls.
+**`internal/` vs `pkg/`.** Go convention: `internal/` cannot be imported by any module outside this repo, which is exactly right for the scheduler's guts (nobody outside this project should ever import `internal/scheduler` directly). `pkg/fleetforgeclient` is the one thing meant for external consumption: a generated REST client, so other teams' tooling can talk to FleetForge without hand-rolling HTTP calls.
 
-**Why `queue/backend.go` is a thin interface separate from `store/redis/queue.go`.** This is the seam identified in doc 1.1/9 for the Redis Streams → NATS JetStream migration path. The scheduler core only ever imports `queue.Backend`, never `store/redis` directly — swapping implementations later is additive, not a scheduler-core rewrite.
+**Why `queue/backend.go` is a thin interface separate from `store/redis/queue.go`.** This is the seam identified in doc 1.1/9 for the Redis Streams → NATS JetStream migration path. The scheduler core only ever imports `queue.Backend`, never `store/redis` directly, so swapping implementations later is additive, not a scheduler-core rewrite.
 
 **Why `worker-agent-runtime/` is separate from `cmd/worker-agent/`.** `cmd/worker-agent/main.go` is wiring (config, gRPC client setup); the actual "how do I run a build safely and stream its logs" logic is substantial enough (and eventually testable enough in isolation) to deserve its own package rather than living in `main.go`.
 

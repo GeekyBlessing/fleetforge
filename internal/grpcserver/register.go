@@ -51,11 +51,11 @@ func NewServer(
 //
 // Known, deliberate gaps (both called out explicitly rather than silently
 // skipped, and both tracked against the roadmap):
-//   - No mTLS/bootstrap-JWT verification yet -- that's docs/09 section 9.4.
+//   - No mTLS/bootstrap-JWT verification yet (that's docs/09 section 9.4).
 //     Wiring it in means adding a grpc.UnaryServerInterceptor in
 //     cmd/scheduler/main.go; this handler doesn't need to change.
 //   - No Redis-backed registration rate limiting yet (docs/04-redis-data-model.md
-//     4.4) -- registration doesn't need it to be correct, and adding it is a
+//     4.4): registration doesn't need it to be correct, and adding it is a
 //     contained change to this one handler.
 func (s *Server) RegisterWorker(
 	ctx context.Context,
@@ -93,13 +93,13 @@ func (s *Server) RegisterWorker(
 
 	// Seed the Redis cache immediately so the worker's first heartbeat
 	// hits a warm cache instead of falling back to Postgres for the epoch
-	// check -- not required for correctness (the fallback path exists
-	// precisely so a cold/missing cache entry is always handled safely),
-	// just avoids an unnecessary extra Postgres round trip on every single
-	// worker's very first heartbeat.
+	// check. Not required for correctness (the fallback path exists
+	// precisely so a cold/missing cache entry is always handled safely);
+	// it just avoids an unnecessary extra Postgres round trip on every
+	// single worker's very first heartbeat.
 	seedCapacity := req.GetCapacitySlots()
 	if seedCapacity <= 0 {
-		seedCapacity = 1 // matches WorkerStore.Register's own default -- see internal/store/postgres/workers.go
+		seedCapacity = 1 // matches WorkerStore.Register's own default; see internal/store/postgres/workers.go
 	}
 	if err := s.cache.SetState(ctx, registered.ID, ffredis.WorkerState{
 		Epoch:             registered.Epoch,

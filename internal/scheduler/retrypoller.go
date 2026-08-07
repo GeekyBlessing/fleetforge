@@ -13,7 +13,7 @@ import (
 // RetryPoller implements the other half of docs/09-design-rationale.md 9.3's
 // backoff path. internal/grpcserver/report_result.go's RetryOrFail parks a
 // job in RETRYING with a future retry_at rather than re-enqueuing it
-// immediately -- deliberately NOT re-enqueuing inline in the same gRPC call,
+// immediately: it deliberately does not re-enqueue inline in the same gRPC call,
 // since a burst of failing jobs all retrying at once would otherwise
 // stampede the exact worker pool that just failed them. This poller is what
 // actually moves a RETRYING job back to QUEUED and onto the Redis stream
@@ -71,7 +71,7 @@ func (p *RetryPoller) poll(ctx context.Context) {
 		}
 		if !ok {
 			// Already claimed by a concurrent pass, or moved on some other
-			// way (e.g. cancelled) between the read above and this write --
+			// way (e.g. cancelled) between the read above and this write:
 			// not an error, just nothing left to do for this job.
 			continue
 		}
@@ -84,7 +84,7 @@ func (p *RetryPoller) poll(ctx context.Context) {
 			CommitSHA:            j.CommitSHA,
 			RequiredCapabilities: j.RequiredCapabilities,
 		}); err != nil {
-			// Not fatal -- the job is QUEUED in Postgres either way
+			// Not fatal: the job is QUEUED in Postgres either way
 			// (docs/06-failure-scenarios.md #4's Redis-down tolerance
 			// applies here too); logged so a stuck enqueue is visible.
 			p.log.Error().Err(err).Str("job_id", j.ID).Msg("failed to enqueue retried job to redis stream")

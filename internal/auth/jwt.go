@@ -8,12 +8,12 @@
 // trade-off, not an oversight: RFC 7519's compact serialization is a small,
 // fully-specified format (base64url(header).base64url(payload).base64url(hmac)),
 // and this service only ever needs to mint and verify its own tokens against
-// its own shared secret -- it never has to interoperate with someone else's
+// its own shared secret: it never has to interoperate with someone else's
 // JWT issuer, parse arbitrary third-party tokens, or support the wider
 // algorithm zoo (RS256, key rotation via JWKS, etc.) that justifies pulling
 // in a general-purpose library. Compare to internal/config's stated reason
 // for skipping viper/koanf: one less dependency for a genuinely small,
-// stable surface. The security-sensitive part -- the HMAC comparison -- uses
+// stable surface. The security-sensitive part, the HMAC comparison, uses
 // hmac.Equal (constant-time), which is the one place hand-rolling would
 // actually be dangerous to get wrong.
 package auth
@@ -38,7 +38,7 @@ const (
 )
 
 var (
-	// ErrInvalidToken covers malformed tokens and signature mismatches --
+	// ErrInvalidToken covers malformed tokens and signature mismatches;
 	// deliberately not distinguished further in the returned error, so
 	// callers can't be tricked into leaking which part of a forged token
 	// was wrong.
@@ -46,8 +46,8 @@ var (
 	ErrExpiredToken = errors.New("token expired")
 )
 
-// Claims is intentionally a small, fixed set -- not an arbitrary
-// map[string]any -- so scope checks (HasScope) are a plain slice
+// Claims is intentionally a small, fixed set (not an arbitrary
+// map[string]any), so scope checks (HasScope) are a plain slice
 // contains-check rather than a type-asserting mess at every call site.
 type Claims struct {
 	Subject   string   `json:"sub"`
@@ -57,7 +57,7 @@ type Claims struct {
 }
 
 // HasScope reports whether the token carries the given scope. No wildcard
-// or hierarchy support (e.g. "jobs:*") -- scopes are an exact-match list,
+// or hierarchy support (e.g. "jobs:*"): scopes are an exact-match list,
 // which is enough for the two scopes this service currently defines and
 // easy to extend later without a breaking change to token holders.
 func (c Claims) HasScope(scope string) bool {
@@ -75,7 +75,7 @@ type jwtHeader struct {
 }
 
 // IssueToken mints a compact HS256 token for subject (a human operator or
-// CI system identifier, recorded for audit purposes -- see
+// CI system identifier, recorded for audit purposes; see
 // docs/09-design-rationale.md 9.4) carrying scopes, expiring after ttl.
 func IssueToken(secret []byte, subject string, scopes []string, ttl time.Duration) (string, error) {
 	if len(secret) == 0 {
@@ -108,7 +108,7 @@ func signToken(secret []byte, claims Claims) (string, error) {
 
 // VerifyToken checks the signature (constant-time) and expiry of token and
 // returns its claims. A tampered payload, a signature from the wrong
-// secret, and an expired-but-otherwise-valid token are all rejected here --
+// secret, and an expired-but-otherwise-valid token are all rejected here:
 // this is the single choke point internal/api's middleware calls through,
 // so there's exactly one place that logic can be wrong rather than one per
 // route.

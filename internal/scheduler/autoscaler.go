@@ -14,7 +14,7 @@ import (
 // ScaleAction is what the autoscaler decided to do on a given tick, per
 // docs/09-design-rationale.md 9.2.
 //
-// There is no cloud-provider integration in the current scope -- 9.7's open
+// There is no cloud-provider integration in the current scope: 9.7's open
 // question #2 (which provider to target) was never answered with a
 // specific concrete target, so per that same doc's own fallback framing,
 // scale-UP is a logged recommendation only (nothing spins up real
@@ -49,11 +49,11 @@ func (a ScaleAction) String() string {
 // cooldown windows, and a rate-limited scale-up magnitude.
 type AutoscalerConfig struct {
 	ScaleUpThresholdPerWorker   float64       // e.g. 5 queued jobs per fleet worker
-	ScaleDownThresholdPerWorker float64       // e.g. 1 -- meaningfully lower than the up threshold, not the same number (that's the textbook bang-bang fix)
+	ScaleDownThresholdPerWorker float64       // e.g. 1: meaningfully lower than the up threshold, not the same number (that's the textbook bang-bang fix)
 	ScaleUpCooldown             time.Duration // default 5m
-	ScaleDownCooldown           time.Duration // default 10m -- longer, since removing capacity is riskier to reverse quickly
-	MaxScaleUpFraction          float64       // e.g. 0.25 -- never recommend more than +25% fleet size in one decision
-	TrendWindowSamples          int           // e.g. 3 -- consecutive non-decreasing samples required before scale-up fires
+	ScaleDownCooldown           time.Duration // default 10m: longer, since removing capacity is riskier to reverse quickly
+	MaxScaleUpFraction          float64       // e.g. 0.25: never recommend more than +25% fleet size in one decision
+	TrendWindowSamples          int           // e.g. 3: consecutive non-decreasing samples required before scale-up fires
 }
 
 func DefaultAutoscalerConfig() AutoscalerConfig {
@@ -70,7 +70,7 @@ func DefaultAutoscalerConfig() AutoscalerConfig {
 // Autoscaler implements docs/09-design-rationale.md 9.2's decision loop.
 // Signals used: queue depth (from JobStore, summed across priorities),
 // idle-worker count (from WorkerStore), and queue-depth TREND (this
-// struct's own in-memory sample history) -- three of the doc's four
+// struct's own in-memory sample history): three of the doc's four
 // signals. The fourth, CPU utilization from heartbeat resource_usage, is a
 // deliberate, documented gap: doc 5.2's HeartbeatRequest never grew a
 // resource_usage field, so there is no data source for it yet. Adding it
@@ -154,7 +154,7 @@ func (a *Autoscaler) tick(ctx context.Context) {
 	case fleetSize > 0:
 		queuedPerWorker = float64(totalQueued) / float64(fleetSize)
 	case totalQueued > 0:
-		// Jobs queued with literally zero sizeable fleet -- treat as
+		// Jobs queued with literally zero sizeable fleet: treat as
 		// maximally over-threshold rather than dividing by zero.
 		queuedPerWorker = a.cfg.ScaleUpThresholdPerWorker + 1
 	}
@@ -229,7 +229,7 @@ func (a *Autoscaler) doScaleDown(ctx context.Context, now time.Time) {
 		return
 	}
 	if candidate == "" {
-		return // nothing fully-idle to drain right now -- not an error, just nothing to do
+		return // nothing fully-idle to drain right now; not an error, just nothing to do
 	}
 
 	result, ok, err := a.workers.RequestDrain(ctx, candidate)
@@ -242,7 +242,7 @@ func (a *Autoscaler) doScaleDown(ctx context.Context, now time.Time) {
 	}
 
 	// Same dual-write pattern as internal/api/handlers_workers.go's manual
-	// drain endpoint -- the autoscaler's drain must be just as visible to
+	// drain endpoint: the autoscaler's drain must be just as visible to
 	// the heartbeat push logic as an operator-initiated one, immediately,
 	// not after the next coalescing-window Postgres flush.
 	currentJobID := ""

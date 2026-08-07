@@ -61,7 +61,7 @@ type jobListResponse struct {
 // Postgres first (durable, source of truth) and only enqueues to Redis
 // once that succeeds. Known gap: if the enqueue itself fails, the job
 // still exists as QUEUED in Postgres, but nothing currently re-scans
-// Postgres for QUEUED jobs missing a stream entry -- there's no periodic
+// Postgres for QUEUED jobs missing a stream entry: there's no periodic
 // fallback poller yet (docs/06-failure-scenarios.md #4 describes the
 // intended behavior; internal/scheduler/loop.go's error handling protects
 // against a message being dropped AFTER it reaches the stream, not against
@@ -117,7 +117,7 @@ func (h *JobsHandler) SubmitJob(w http.ResponseWriter, r *http.Request) {
 		CommitSHA:            job.CommitSHA,
 		RequiredCapabilities: job.RequiredCapabilities,
 	}); err != nil {
-		// Logged, not fatal to the request -- see the doc comment above.
+		// Logged, not fatal to the request; see the doc comment above.
 		h.log.Error().Err(err).Str("job_id", job.ID).Msg("failed to enqueue job to redis stream (job is still QUEUED in postgres)")
 	}
 

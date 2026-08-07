@@ -1,6 +1,6 @@
 """Load test for the REST submission path (docs/08-implementation-roadmap.md
 Milestone 7). Run alongside fake_worker.py (which supplies the simulated
-worker fleet -- without it, every submitted job just sits QUEUED forever
+worker fleet; without it, every submitted job just sits QUEUED forever
 and every request here will time out) via:
 
     pip install locust
@@ -14,7 +14,7 @@ watch p50/p95/p99 build up live, or run headless:
 
 If the scheduler has FLEETFORGE_JWT_SECRET set (docs/09-design-rationale.md
 9.4), export FLEETFORGE_TOKEN with a jobs:submit-scoped token first (see
-`fleetforgectl auth mint-token`) -- otherwise every POST /v1/jobs gets a 401
+`fleetforgectl auth mint-token`); otherwise every POST /v1/jobs gets a 401
 and this only measures how fast the scheduler can reject requests.
 """
 import os
@@ -29,10 +29,10 @@ ASSIGNMENT_TIMEOUT_S = 30
 
 
 class FleetForgeUser(HttpUser):
-    # Deliberately not "as fast as possible" -- doc 9.2's autoscaler design
+    # Deliberately not "as fast as possible": doc 9.2's autoscaler design
     # assumes a somewhat realistic submission rate (CI systems firing on
-    # commits/PRs), not a flood; --users/--spawn-rate is how you dial up
-    # the sustained rate for a given test run, this wait_time just keeps
+    # commits/PRs), not a flood. --users/--spawn-rate is how you dial up
+    # the sustained rate for a given test run; this wait_time just keeps
     # any single simulated CI client from hammering faster than a real one
     # plausibly would.
     wait_time = between(0.5, 2.0)
@@ -50,7 +50,7 @@ class FleetForgeUser(HttpUser):
             "branch": "main",
             "commit_sha": "".join(random.choices(string.hexdigits.lower(), k=40)),
             "max_retries": 3,
-            # Unique per request -- doc 3's idempotency-key dedupe would
+            # Unique per request: doc 3's idempotency-key dedupe would
             # otherwise make every retry-of-a-failed-request after the
             # first look like a duplicate submission, silently skewing the
             # measured throughput down.
@@ -70,7 +70,7 @@ class FleetForgeUser(HttpUser):
             return
 
         # The POST above only measures "did Postgres durably accept this
-        # job" (doc 5.4's first half) -- the number that actually matters
+        # job" (doc 5.4's first half); the number that actually matters
         # for doc 9's scheduler benchmark is submission-to-ASSIGNED, which
         # requires a worker fleet to exist (fake_worker.py) and is recorded
         # here as its own named metric so Locust's percentiles reflect

@@ -4,13 +4,13 @@
 // this interface is the seam that lets a future NATS JetStream
 // implementation be a new file in internal/store/*, not a scheduler-core
 // rewrite. Nothing in internal/api should import internal/store/redis
-// directly for queue access -- only this interface.
+// directly for queue access; only this interface.
 package queue
 
 import "context"
 
 // JobMessage is the (small, non-authoritative) payload carried on the
-// queue -- Postgres remains the source of truth for full job state
+// queue: Postgres remains the source of truth for full job state
 // (docs/04-redis-data-model.md 4.1); this is just enough for the scheduler
 // to find and evaluate a candidate without a round trip per queue entry.
 type JobMessage struct {
@@ -22,7 +22,7 @@ type JobMessage struct {
 	RequiredCapabilities []string
 }
 
-// Backend is intentionally minimal -- just enough for job submission to
+// Backend is intentionally minimal: just enough for job submission to
 // enqueue. The scheduler's matching loop (internal/scheduler/loop.go)
 // reads/acks directly against the Redis client for its consumer-group
 // semantics rather than through this interface, since those operations are

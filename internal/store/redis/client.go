@@ -2,7 +2,7 @@
 // docs/04-redis-data-model.md: the hot-path worker-state cache, the
 // liveness/alive keys, and the job queue. Nothing outside this
 // package should call the go-redis client directly, for the same reason
-// internal/store/postgres owns all SQL -- one place to keep the key
+// internal/store/postgres owns all SQL: one place to keep the key
 // naming/TTL contracts honest.
 package redis
 
@@ -14,7 +14,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// NewClient connects and verifies reachability up front -- same rationale
+// NewClient connects and verifies reachability up front; same rationale
 // as postgres.NewPool: fail at startup with a clear message, not on the
 // first heartbeat.
 func NewClient(ctx context.Context, addr string) (*redis.Client, error) {

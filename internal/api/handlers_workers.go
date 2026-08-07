@@ -1,6 +1,6 @@
 // Package api implements the human/CI-facing REST layer described in
-// docs/02-openapi.yaml. It never talks to workers directly -- that's the
-// gRPC control plane's job (internal/grpcserver) -- it only reads/writes
+// docs/02-openapi.yaml. It never talks to workers directly; that's the
+// gRPC control plane's job (internal/grpcserver). It only reads/writes
 // through the store packages.
 package api
 
@@ -27,8 +27,8 @@ func NewWorkersHandler(store *postgres.WorkerStore, cache *ffredis.WorkerCache, 
 
 // workerResponse mirrors the Worker schema in docs/02-openapi.yaml. Kept as
 // its own type (rather than serializing postgres.WorkerRow directly) so a
-// storage-layer field rename never silently changes the wire contract --
-// the OpenAPI spec is the source of truth for what clients see, and this
+// storage-layer field rename never silently changes the wire contract: the
+// OpenAPI spec is the source of truth for what clients see, and this
 // struct is where that gets enforced.
 type workerResponse struct {
 	ID                string            `json:"id"`
@@ -103,7 +103,7 @@ func (h *WorkersHandler) ListWorkers(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// DrainWorker implements POST /workers/{workerId}/drain -- the
+// DrainWorker implements POST /workers/{workerId}/drain: the
 // operator-initiated graceful-removal flow (docs/09-design-rationale.md).
 // See WorkerStore.RequestDrain for the state-machine details; this handler
 // is just the dual-write shell around it, mirroring the transition into the
@@ -160,7 +160,7 @@ func (h *WorkersHandler) ResumeWorker(w http.ResponseWriter, r *http.Request) {
 // syncDrainToCache mirrors a drain/resume transition into Redis. Two
 // separate cache writes on purpose: SetState (status/current_job_id/etc.)
 // and SetDrainRequested (the drain_requested flag) are intentionally
-// disjoint writers -- see internal/store/redis/cache.go's SetState comment
+// disjoint writers; see internal/store/redis/cache.go's SetState comment
 // for why merging them back into one call would reintroduce the exact
 // read-modify-write race that split was meant to avoid.
 func (h *WorkersHandler) syncDrainToCache(r *http.Request, workerID string, result postgres.DrainResult, drainRequested bool) {

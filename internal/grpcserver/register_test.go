@@ -52,7 +52,7 @@ func TestValidateRegisterRequest_MissingFields(t *testing.T) {
 // rejected at the transport boundary if it's ever wrong: a request with a
 // negative capacity_slots shouldn't reach WorkerStore.Register and silently
 // get clamped there without anyone noticing at the API layer. Validation
-// intentionally does NOT check capacity_slots though -- 0/unset is a valid
+// intentionally does NOT check capacity_slots: 0/unset is a valid
 // "default to 1" signal per the OpenAPI spec, so confirm that passes.
 func TestValidateRegisterRequest_ZeroCapacitySlotsIsValid(t *testing.T) {
 	req := validRequest()

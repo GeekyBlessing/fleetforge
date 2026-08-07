@@ -6,7 +6,7 @@
 // FLEETFORGE_JWT_SECRET is set on the scheduler.
 //
 // docs/07-repository-structure.md calls for pkg/fleetforgeclient, a client
-// generated from openapi.yaml, to back this CLI eventually -- deferred
+// generated from openapi.yaml, to back this CLI eventually; that's deferred
 // until the REST surface stabilizes further, since generating a client
 // against a still-growing API is more scaffolding than the CLI itself.
 package main

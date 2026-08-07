@@ -103,7 +103,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
         '409':
-          description: Stale epoch — a newer registration exists for this worker identity; caller must re-register
+          description: "Stale epoch: a newer registration exists for this worker identity, caller must re-register"
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -232,7 +232,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
         '409':
-          description: "Duplicate idempotency_key — returns the original job instead of creating a new one"
+          description: "Duplicate idempotency_key: returns the original job instead of creating a new one"
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Job' }

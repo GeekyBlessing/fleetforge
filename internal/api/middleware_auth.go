@@ -9,7 +9,7 @@ import (
 
 // RequireScope rejects any request that doesn't carry a valid, unexpired
 // bearer token (internal/auth) with the given scope. Wired into
-// router.go's write endpoints only when a JWT secret is configured --
+// router.go's write endpoints only when a JWT secret is configured;
 // see NewRouter's doc comment for why reads stay open regardless.
 func RequireScope(secret []byte, scope string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {

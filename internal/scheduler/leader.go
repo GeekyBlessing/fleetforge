@@ -10,7 +10,7 @@ import (
 )
 
 // leaderLockKey is an arbitrary but fixed advisory-lock key shared by every
-// scheduler replica -- whoever holds pg_advisory_lock(leaderLockKey) is the
+// scheduler replica: whoever holds pg_advisory_lock(leaderLockKey) is the
 // leader. Picked once, never reused for anything else in this codebase.
 const leaderLockKey = 727272001
 
@@ -22,9 +22,9 @@ const leaderLockKey = 727272001
 // The mechanism: acquire a SESSION-scoped advisory lock on one dedicated
 // connection checked out from the pool and never returned. Postgres
 // releases a session-scoped advisory lock automatically the instant that
-// connection closes -- crash, network partition, or graceful shutdown, it
-// doesn't matter which -- so "the leader died" and "the lock becomes
-// acquirable by someone else" are the same event, with no separate
+// connection closes, whether from a crash, network partition, or graceful
+// shutdown; it doesn't matter which. So "the leader died" and "the lock
+// becomes acquirable by someone else" are the same event, with no separate
 // heartbeat/lease-renewal protocol needed (docs/06-failure-scenarios.md #1, #12).
 type LeaderElector struct {
 	pool *pgxpool.Pool

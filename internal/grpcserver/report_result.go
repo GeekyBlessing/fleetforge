@@ -62,7 +62,7 @@ func (s *Server) ReportJobResult(
 
 	if !completed {
 		// Stale epoch, or the job was already completed/reassigned by the
-		// time this report arrived -- exactly doc 6 #10's discard case.
+		// time this report arrived: exactly doc 6 #10's discard case.
 		s.log.Warn().
 			Str("job_id", jobID).
 			Int64("reported_assignment_epoch", req.GetAssignmentEpoch()).
@@ -74,21 +74,21 @@ func (s *Server) ReportJobResult(
 		ok, availableCapacity, newWorkerStatus, err := s.workers.FreeWorker(ctx, *job.WorkerID, req.GetAssignmentEpoch())
 		if err != nil {
 			s.log.Error().Err(err).Str("worker_id", *job.WorkerID).Msg("failed to free worker after job completion")
-			// Not fatal to the RPC -- the job result is already durably
+			// Not fatal to the RPC: the job result is already durably
 			// recorded above; a worker stuck showing BUSY with no
 			// corresponding running job is a (rare, logged) inconsistency,
 			// not a reason to tell the worker its result wasn't received.
 		} else if ok {
-			// Root-cause fix for the reassignment-loop bug: FreeWorker only
-			// updates Postgres. Without also correcting the Redis cache
-			// here, the cache keeps showing status=BUSY with THIS job's ID
-			// forever, and heartbeat.go's assignment-push logic
-			// (cached.Status=="BUSY" && cached.CurrentJobID!="" &&
-			// currentJobID=="") would keep re-pushing this same, already-
-			// terminal job to the worker on every future heartbeat.
-			// newWorkerStatus is either READY or DRAINING -- see
-			// WorkerStore.FreeWorker's comment on why a draining worker
-			// must not come back as READY just because its job finished.
+			// Also corrects the Redis cache after FreeWorker updates
+			// Postgres. Without this, the cache keeps showing status=BUSY
+			// with THIS job's ID indefinitely, and heartbeat.go's
+			// assignment-push logic (cached.Status=="BUSY" &&
+			// cached.CurrentJobID!="" && currentJobID=="") would keep
+			// re-pushing this same, already-terminal job to the worker on
+			// every future heartbeat. newWorkerStatus is either READY or
+			// DRAINING; see WorkerStore.FreeWorker's comment on why a
+			// draining worker must not come back as READY just because its
+			// job finished.
 			if err := s.cache.SetState(ctx, *job.WorkerID, ffredis.WorkerState{
 				Epoch:             req.GetAssignmentEpoch(),
 				Status:            newWorkerStatus,
@@ -102,7 +102,7 @@ func (s *Server) ReportJobResult(
 	}
 
 	metrics.JobsCompletedTotal.WithLabelValues(finalStatus).Inc()
-	// Duration is only meaningful for a job's FINAL terminal transition --
+	// Duration is only meaningful for a job's FINAL terminal transition:
 	// a RETRYING job isn't done yet (it's going to run again), so recording
 	// "duration" here would conflate one attempt's runtime with the job's
 	// eventual total lifetime. job.StartedAt is nil if the job somehow never

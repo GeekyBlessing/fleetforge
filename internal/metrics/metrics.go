@@ -9,7 +9,7 @@ package metrics
 import "github.com/prometheus/client_golang/prometheus"
 
 var (
-	// JobsQueued is a gauge, not a counter -- it's refreshed wholesale on
+	// JobsQueued is a gauge, not a counter: it's refreshed wholesale on
 	// every Collector tick (internal/metrics/collector.go) from a fresh
 	// Postgres COUNT(*), not incremented/decremented at each individual
 	// enqueue/dequeue call site. That sidesteps having to thread a metrics
@@ -20,7 +20,7 @@ var (
 		Help: "Current number of jobs in QUEUED status, by priority (0=highest, 9=lowest).",
 	}, []string{"priority"})
 
-	// WorkersByStatus mirrors WorkerStore.CountByStatus -- one gauge sample
+	// WorkersByStatus mirrors WorkerStore.CountByStatus: one gauge sample
 	// per worker_status enum value, refreshed the same way as JobsQueued.
 	WorkersByStatus = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "fleetforge_workers",
@@ -44,8 +44,8 @@ var (
 	}, []string{"status"})
 
 	// JobDurationSeconds is only observed for a job's FINAL terminal
-	// transition (SUCCESS/FAILED/CANCELLED, not RETRYING -- a job that's
-	// going to run again isn't "done" yet), measured from started_at to
+	// transition (SUCCESS/FAILED/CANCELLED, not RETRYING, since a job
+	// that's going to run again isn't "done" yet), measured from started_at to
 	// finished_at (execution time only, not queue wait time).
 	JobDurationSeconds = prometheus.NewHistogram(prometheus.HistogramOpts{
 		Name:    "fleetforge_job_duration_seconds",
@@ -54,7 +54,7 @@ var (
 	})
 
 	// AutoscalerDecisionsTotal records every autoscaler tick's outcome
-	// (docs/09-design-rationale.md 9.2), including "hold" -- so a Grafana
+	// (docs/09-design-rationale.md 9.2), including "hold", so a Grafana
 	// panel can show the decision RATE, not just count the rare scale
 	// events, which is what actually lets you eyeball "is the autoscaler
 	// alive and evaluating" versus "is it just never deciding to act."
@@ -65,10 +65,10 @@ var (
 )
 
 // MustRegister wires every collector above into reg. Called exactly once
-// from cmd/scheduler/main.go -- registering package-level vars more than
+// from cmd/scheduler/main.go: registering package-level vars more than
 // once would panic (client_golang's documented behavior for a duplicate
-// registration), which is a deliberate guardrail against accidentally
-// wiring this up twice.
+// registration), a deliberate guardrail against accidentally wiring this
+// up twice.
 func MustRegister(reg prometheus.Registerer) {
 	reg.MustRegister(
 		JobsQueued,

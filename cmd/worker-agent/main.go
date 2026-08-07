@@ -5,7 +5,7 @@
 // ReportJobResult call back to the scheduler. A DrainRequested=true on that
 // same stream (see agentState.setDraining) makes this agent finish its
 // current job (if any) and then report itself
-// as DRAINING instead of READY -- it keeps heartbeating (so an operator can
+// as DRAINING instead of READY. It keeps heartbeating (so an operator can
 // still see it and its eventual OFFLINE/DEAD transition), it just never
 // accepts new work again. There is no self-initiated process exit here;
 // deciding when it's safe to actually kill the process is left to whatever
@@ -53,7 +53,7 @@ func (a *agentState) snapshot() (fleetforgev1.WorkerStatus, string, int32) {
 }
 
 // startJob is only ever called by the single heartbeat-receive goroutine,
-// so no separate "am I already busy" locking races are possible -- but the
+// so no separate "am I already busy" locking races are possible. The
 // mutex still guards against the heartbeat-send goroutine reading a
 // half-updated state concurrently.
 func (a *agentState) startJob(jobID string) {
@@ -66,7 +66,7 @@ func (a *agentState) startJob(jobID string) {
 
 // finishJob reports DRAINING instead of READY if a drain request arrived
 // while this job was running (setDraining couldn't flip status itself in
-// that case, since the job was still in flight) -- this is what lets an
+// that case, since the job was still in flight); this is what lets an
 // operator drain a busy worker: it finishes its current job normally, then
 // never goes back to advertising itself as available for new work.
 func (a *agentState) finishJob(capacitySlots int32) {
@@ -112,15 +112,14 @@ func (a *agentState) isDraining() bool {
 }
 
 // clearDraining undoes setDraining once the scheduler stops requesting
-// drain (an operator called ResumeDrain). Real gap, caught by actually
-// running this: without this method, there was NO code path that ever
-// flipped agentState.draining back to false -- the receive loop only ever
-// called setDraining() when DrainRequested was true, with no corresponding
-// "else" for when it goes back to false. A resumed worker would keep
-// silently refusing every future assignment as "received assignment while
-// draining, ignoring" forever, even though the SERVER correctly considered
-// it READY again. Returns true only the first time, same log-once pattern
-// as setDraining.
+// drain (an operator called ResumeDrain). Without this method, no code
+// path ever flips agentState.draining back to false: the receive loop
+// only calls setDraining() when DrainRequested is true, with no
+// corresponding case for when it goes back to false. Left unhandled, a
+// resumed worker would keep silently refusing every future assignment as
+// "received assignment while draining, ignoring" forever, even though the
+// SERVER correctly considers it READY again. Returns true only the first
+// time, same log-once pattern as setDraining.
 func (a *agentState) clearDraining() bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -145,7 +144,7 @@ func main() {
 
 	// insecure.NewCredentials() is the fallback for local dev only. mTLS
 	// (docs/09-design-rationale.md 9.4) takes over as soon as all three
-	// cert/key/CA paths are configured -- see scripts/gen-certs.sh.
+	// cert/key/CA paths are configured; see scripts/gen-certs.sh.
 	transportCreds := insecure.NewCredentials()
 	if cfg.TLSCertFile != "" && cfg.TLSKeyFile != "" && cfg.TLSCAFile != "" {
 		tlsConfig, tlsErr := auth.ClientTLSConfig(cfg.TLSCertFile, cfg.TLSKeyFile, cfg.TLSCAFile)
@@ -248,7 +247,7 @@ type heartbeatDeps struct {
 // streamHeartbeats implements the worker side of
 // docs/05-sequence-diagrams.md 5.2: one long-lived bidirectional stream, a
 // HeartbeatRequest sent every `interval`, and a background goroutine
-// reading whatever the scheduler sends back -- including a pending job
+// reading whatever the scheduler sends back, including a pending job
 // assignment.
 func streamHeartbeats(ctx context.Context, d heartbeatDeps) error {
 	stream, err := d.client.Heartbeat(ctx)
@@ -272,19 +271,19 @@ func streamHeartbeats(ctx context.Context, d heartbeatDeps) error {
 			if a := resp.GetAssignment(); a != nil {
 				switch {
 				case d.state.isBusy():
-					// Already running something -- this would only happen
+					// Already running something: this would only happen
 					// if the scheduler pushed an assignment to a worker it
 					// (mistakenly) believes is idle. Log loudly; don't
 					// silently drop the mismatch.
 					d.log.Warn().Str("job_id", a.GetJobId()).Msg("received assignment while already busy, ignoring")
 				case d.state.isDraining():
-					// Shouldn't happen in practice -- WorkerStore.AssignJob's
+					// Shouldn't happen in practice: WorkerStore.AssignJob's
 					// CAS requires status='READY', and a draining worker is
-					// never READY (docs/09-design-rationale.md) -- but
-					// refusing explicitly here rather than silently
-					// executing it is cheap insurance against exactly the
-					// kind of cache/Postgres desync bug this project has
-					// already hit twice.
+					// never READY (docs/09-design-rationale.md). Refusing
+					// explicitly here rather than silently executing it is
+					// cheap insurance against exactly the kind of
+					// cache/Postgres desync bug this project has already
+					// hit twice.
 					d.log.Warn().Str("job_id", a.GetJobId()).Msg("received assignment while draining, ignoring")
 				default:
 					d.log.Info().Str("job_id", a.GetJobId()).Str("repository", a.GetRepository()).Msg("received job assignment, starting execution")
@@ -332,7 +331,7 @@ func streamHeartbeats(ctx context.Context, d heartbeatDeps) error {
 
 // runAssignment executes one job and reports the result. It runs in its
 // own goroutine so the heartbeat send/receive loop is never blocked on
-// build execution -- a worker must keep heartbeating (and receiving any
+// build execution: a worker must keep heartbeating (and receiving any
 // drain signal) while a job is RUNNING, not go silent for the length of
 // the build.
 func runAssignment(ctx context.Context, d heartbeatDeps, a *fleetforgev1.JobAssignment) {
@@ -367,7 +366,7 @@ func runAssignment(ctx context.Context, d heartbeatDeps, a *fleetforgev1.JobAssi
 		d.log.Info().Str("job_id", a.GetJobId()).Bool("success", result.Success).Msg("job result reported")
 	}
 
-	// Free up locally regardless of whether the report was accepted --
+	// Free up locally regardless of whether the report was accepted:
 	// even in the discarded-stale-epoch case, THIS worker is done with the
 	// job either way and should go back to accepting new work.
 	d.state.finishJob(d.capacitySlots)

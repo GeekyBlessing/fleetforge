@@ -55,8 +55,8 @@ func TestVerifyToken_WrongSecretRejected(t *testing.T) {
 
 // This is the case that actually matters for a bearer-token scheme: a
 // forged token that keeps the original (validly-signed) header/signature
-// but swaps in different claims -- e.g. an attacker who intercepted a
-// jobs:submit-scoped token trying to add workers:drain to it -- must be
+// but swaps in different claims (for example, an attacker who intercepted
+// a jobs:submit-scoped token trying to add workers:drain to it) must be
 // rejected, because the signature no longer matches the tampered payload.
 func TestVerifyToken_TamperedPayloadRejected(t *testing.T) {
 	secret := []byte("test-secret")
@@ -70,7 +70,7 @@ func TestVerifyToken_TamperedPayloadRejected(t *testing.T) {
 	if len(parts) != 3 {
 		t.Fatalf("expected 3 token parts, got %d", len(parts))
 	}
-	// Flip the payload segment to something else entirely -- any change
+	// Flip the payload segment to something else entirely; any change
 	// invalidates the signature over signingInput = header + "." + payload.
 	tampered := parts[0] + "." + parts[0] + "X" + "." + parts[2]
 

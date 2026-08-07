@@ -10,7 +10,7 @@ import (
 // ServerTLSConfig builds the scheduler side of worker<->scheduler mTLS
 // (docs/09-design-rationale.md 9.4): it presents certFile/keyFile as its
 // own server certificate and requires every connecting client to present a
-// certificate signed by the CA in caFile, verified on every connection --
+// certificate signed by the CA in caFile, verified on every connection,
 // not just at registration. This is what actually prevents rogue worker
 // registration: a stolen bootstrap token can be replayed from anywhere, a
 // client certificate tied to mTLS cannot.

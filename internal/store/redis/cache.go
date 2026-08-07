@@ -33,7 +33,7 @@ type WorkerState struct {
 	CurrentJobID       string // "" means no current job
 	AvailableCapacity  int32
 	LastPGFlushUnix    int64
-	// DrainRequested is read-only from SetState's perspective -- it is
+	// DrainRequested is read-only from SetState's perspective: it is
 	// populated by GetState but deliberately NOT one of the fields SetState
 	// writes (see SetState's comment). Only SetDrainRequested ever writes
 	// this hash field.
@@ -46,7 +46,7 @@ func aliveKey(workerID string) string { return "worker:" + workerID + ":alive" }
 // SetState deliberately does NOT include drain_requested in the fields it
 // writes. It's called on every heartbeat and every assignment/free
 // transition, each of which only knows about the worker's operational
-// status -- if it also wrote drain_requested (defaulting a zero-value
+// status: if it also wrote drain_requested (defaulting a zero-value
 // WorkerState{} to false), a plain heartbeat from a worker that an operator
 // had just told to drain would silently clear that flag back to false on
 // its very next heartbeat, undoing the drain request. Keeping
@@ -67,7 +67,7 @@ func (c *WorkerCache) SetState(ctx context.Context, workerID string, s WorkerSta
 	return nil
 }
 
-// SetDrainRequested is the only writer of the drain_requested hash field --
+// SetDrainRequested is the only writer of the drain_requested hash field;
 // see SetState's comment for why that separation matters. Called from
 // internal/api/handlers_workers.go's drain/resume endpoints right after the
 // corresponding Postgres update.
@@ -78,7 +78,7 @@ func (c *WorkerCache) SetDrainRequested(ctx context.Context, workerID string, dr
 	return nil
 }
 
-// GetState returns (state, found, err). found=false means a cache miss --
+// GetState returns (state, found, err). found=false means a cache miss:
 // callers must fall back to Postgres, not assume the worker is gone.
 func (c *WorkerCache) GetState(ctx context.Context, workerID string) (WorkerState, bool, error) {
 	res, err := c.client.HGetAll(ctx, stateKey(workerID)).Result()
@@ -105,7 +105,7 @@ func (c *WorkerCache) GetState(ctx context.Context, workerID string) (WorkerStat
 }
 
 // SetAlive refreshes the TTL-based liveness key doc 4.2.1 describes. This
-// is the fast-path signal only -- the reaper's Postgres sweep
+// is the fast-path signal only; the reaper's Postgres sweep
 // (internal/scheduler/reaper.go) is authoritative and doesn't depend on
 // this key existing or expiring correctly.
 func (c *WorkerCache) SetAlive(ctx context.Context, workerID string, ttl time.Duration) error {
