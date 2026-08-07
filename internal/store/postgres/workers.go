@@ -98,7 +98,11 @@ func (s *WorkerStore) Register(ctx context.Context, p RegisterWorkerParams) (Reg
 				-- "stale" to the reaper (ListStale) before it has even had a
 				-- chance to send its first heartbeat under the new epoch --
 				-- a real bug caught by actually running this (see git log /
-				-- session notes), not a hypothetical.
+				-- session notes), not a hypothetical. This NULL is
+				-- momentary: the promote-to-READY step below overwrites it
+				-- with now() in the same transaction, closing a second,
+				-- related bug (see that step's comment) rather than
+				-- reopening it.
 				last_heartbeat          = NULL,
 				epoch                   = workers.epoch + 1,
 				updated_at              = now()
@@ -125,7 +129,23 @@ func (s *WorkerStore) Register(ctx context.Context, p RegisterWorkerParams) (Reg
 		// reaper similarly does "state change + event insert" as a pair --
 		// one consistent pattern across the codebase for "on top of a state
 		// change, always drop a breadcrumb".
-		if _, err := tx.Exec(ctx, `UPDATE workers SET status = 'READY' WHERE id = $1`, result.ID); err != nil {
+		// last_heartbeat is also stamped here, not left at the NULL the
+		// insert/upsert above just set. Real bug, caught by chaos-testing
+		// scenario #3: worker-agent's heartbeat loop uses time.NewTicker,
+		// which fires only AFTER the first interval elapses (5s by
+		// default), so a worker that crashes before its first heartbeat
+		// -- entirely possible, since the scheduler can assign a job
+		// within milliseconds of registration, well before that first
+		// tick -- left last_heartbeat NULL forever. ListStale (below)
+		// requires last_heartbeat IS NOT NULL, so that worker, and
+		// whatever job it was assigned, could never be reaped: stuck
+		// BUSY/ASSIGNED permanently. Stamping now() here closes the
+		// window (the worker becomes reapable timeoutSeconds after
+		// registration even if it never sends a single heartbeat) without
+		// reintroducing the OTHER bug this line originally guarded
+		// against (a re-registering worker's stale old timestamp making
+		// it look instantly dead) -- now() is always fresh, never stale.
+		if _, err := tx.Exec(ctx, `UPDATE workers SET status = 'READY', last_heartbeat = now() WHERE id = $1`, result.ID); err != nil {
 			return fmt.Errorf("promote worker to ready: %w", err)
 		}
 
