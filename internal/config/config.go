@@ -73,16 +73,16 @@ func LoadSchedulerConfig() (SchedulerConfig, error) {
 
 // WorkerAgentConfig holds everything cmd/worker-agent needs to start.
 type WorkerAgentConfig struct {
-	SchedulerGRPCAddr string
-	InstanceID        string // stable across restarts; see docs/05-sequence-diagrams.md 5.1
-	Hostname          string
-	OS                string
-	CPUCores          int
-	MemoryMB          int
-	Version           string
-	CapacitySlots     int
-	Labels            map[string]string
-	Capabilities      []string
+	SchedulerGRPCAddr    string
+	InstanceID           string // stable across restarts; see docs/05-sequence-diagrams.md 5.1
+	Hostname             string
+	OS                   string
+	CPUCores             int
+	MemoryMB             int
+	Version              string
+	CapacitySlots        int
+	Labels               map[string]string
+	Capabilities         []string
 	SimulatedFailureRate float64 // 0.0-1.0; see worker-agent-runtime.SimulatedExecutor
 
 	// mTLS client identity for dialing the scheduler; mirrors

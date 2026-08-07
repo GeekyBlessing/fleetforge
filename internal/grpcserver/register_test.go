@@ -25,8 +25,8 @@ func TestValidateRegisterRequest_Valid(t *testing.T) {
 
 func TestValidateRegisterRequest_MissingFields(t *testing.T) {
 	tests := []struct {
-		name    string
-		mutate  func(*fleetforgev1.RegisterWorkerRequest)
+		name   string
+		mutate func(*fleetforgev1.RegisterWorkerRequest)
 	}{
 		{"missing hostname", func(r *fleetforgev1.RegisterWorkerRequest) { r.Hostname = "" }},
 		{"missing instance_id", func(r *fleetforgev1.RegisterWorkerRequest) { r.InstanceId = "" }},

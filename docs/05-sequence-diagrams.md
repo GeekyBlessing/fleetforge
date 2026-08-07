@@ -1,5 +1,7 @@
 # 5. Sequence Diagrams
 
+These diagrams describe the original design and are largely accurate to what shipped, with three specific exceptions: the registration flow's Redis-based rate-limit check (5.1) was never implemented, there is no rate limiting anywhere in the current system; the heartbeat flow's "Async Postgres Writer" (5.2) is not a separate process, the coalescing logic it describes runs inline inside the same gRPC handler call; and the reaper's Redis pub/sub event fan-out (`PUBLISH events:worker`, 5.3) was not built. Everything else on this page, including the epoch-fencing mechanism, the atomic Postgres CAS assignment, and the dead-worker sweep, matches the shipped implementation and has been exercised against real running binaries (see `test/chaos/`).
+
 ## 5.1 Worker registration
 
 ```mermaid

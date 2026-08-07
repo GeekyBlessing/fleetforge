@@ -159,22 +159,22 @@ func (s *WorkerStore) Register(ctx context.Context, p RegisterWorkerParams) (Reg
 
 // WorkerRow is the read-side projection used by REST list/get endpoints.
 type WorkerRow struct {
-	ID                 string
-	Hostname            string
-	OS                  string
-	CPUCores            int32
-	MemoryMB            int32
-	Labels              map[string]string
-	Capabilities        []string
-	Status              string
-	CurrentJobID        *string
-	LastHeartbeat        *time.Time
-	Version             string
-	CapacitySlots       int32
-	AvailableCapacity   int32
-	Epoch               int64
-	RegisteredAt        time.Time
-	DrainRequested      bool
+	ID                string
+	Hostname          string
+	OS                string
+	CPUCores          int32
+	MemoryMB          int32
+	Labels            map[string]string
+	Capabilities      []string
+	Status            string
+	CurrentJobID      *string
+	LastHeartbeat     *time.Time
+	Version           string
+	CapacitySlots     int32
+	AvailableCapacity int32
+	Epoch             int64
+	RegisteredAt      time.Time
+	DrainRequested    bool
 }
 
 // CountByStatus backs internal/metrics's worker-count gauge: one GROUP BY
@@ -415,9 +415,9 @@ func (s *WorkerStore) MarkDeadAndRequeue(ctx context.Context, workerID string, e
 			return fmt.Errorf("find jobs assigned to dead worker: %w", err)
 		}
 		type requeueJob struct {
-			id                     string
-			createdAt              time.Time
-			retries, maxRetries    int
+			id                  string
+			createdAt           time.Time
+			retries, maxRetries int
 		}
 		var jobs []requeueJob
 		for rows.Next() {

@@ -6,3 +6,4 @@ certs/
 test/load/venv/
 __pycache__/
 *.pyc
+.demo/

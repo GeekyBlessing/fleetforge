@@ -1,5 +1,7 @@
 # 1. System Architecture Overview
 
+This document describes the original target production architecture: HA scheduler replicas behind a load balancer on Kubernetes, a Postgres read replica, and cloud-provider autoscaling. It predates implementation and is kept as-is because it's the design this system was built toward. What actually runs in local development today is simpler: see the README's Architecture section for the as-built diagram, and `docs/07-repository-structure.md` section 7.2 for a specific list of what was scoped out (cloud autoscaling, read replicas, Kubernetes manifests, rate limiting).
+
 ## 1.1 Tech stack recommendation
 
 There's a wide range of viable technology choices for a system like this. Here's what actually goes into production, and why, before looking at a diagram.

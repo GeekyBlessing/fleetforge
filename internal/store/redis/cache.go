@@ -30,9 +30,9 @@ func NewWorkerCache(client *redis.Client) *WorkerCache {
 type WorkerState struct {
 	Epoch             int64
 	Status            string // matches the Postgres worker_status enum values (READY, BUSY, ...)
-	CurrentJobID       string // "" means no current job
-	AvailableCapacity  int32
-	LastPGFlushUnix    int64
+	CurrentJobID      string // "" means no current job
+	AvailableCapacity int32
+	LastPGFlushUnix   int64
 	// DrainRequested is read-only from SetState's perspective: it is
 	// populated by GetState but deliberately NOT one of the fields SetState
 	// writes (see SetState's comment). Only SetDrainRequested ever writes

@@ -1,5 +1,7 @@
 # 6. Failure Scenarios: Detection, Recovery, Mitigation
 
+Scenarios 1, 3, and 6 in the table below are backed by automated chaos tests in `test/chaos/` that exercise them against real compiled binaries, not just design reasoning; see that directory's README for what each script proves and how to reproduce it. Scenario 4's Redis-outage row describes a Postgres-polling fallback for job submission and rate limiting; the fallback poller for orphaned queued jobs was not implemented (see `internal/api/handlers_jobs.go`'s own comment on this gap), and rate limiting does not exist anywhere in the current system. Scenario 13's read-replica row describes the original target architecture; no read replica exists in local development.
+
 The rule this whole system follows: **Postgres transactions are the only place correctness is allowed to live.** Redis, gRPC streams, and in-memory state are all allowed to be wrong, stale, or momentarily lost, because every one of them can be reconciled back to Postgres. Keep that in mind as the reasoning behind almost every row below.
 
 | # | Scenario | Detection | Recovery / Mitigation |
